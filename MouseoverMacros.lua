@@ -13,6 +13,11 @@ end
 local function Harm(spell)
     return "#showtooltip " .. spell .. "\n/cast [@mouseover,harm,nodead][harm,nodead] " .. spell
 end
+-- Either side (Dispel Magic: cleanse a friend or purge an enemy): mouseover, else target. Never yourself.
+local function Any(spell)
+    return "#showtooltip " .. spell .. "
+/cast [@mouseover,exists,nodead][exists,nodead] " .. spell
+end
 -- Res: mouseover corpse, else dead target.
 local function Res(spell)
     return "#showtooltip " .. spell .. "\n/cast [@mouseover,help,dead][help,dead] " .. spell
@@ -23,13 +28,17 @@ local MACROS = {
         { "renew",  Help("Renew") },
         { "lheal",  Help("Lesser Heal") },
         { "heal",   Help("Heal") },
+        { "fheal",  Help("Flash Heal") },
+        { "dgrace", Help("Divine Grace") },
         { "shield", Help("Power Word: Shield") },
         { "fort",   Help("Power Word: Fortitude") },
         { "curedis", Help("Cure Disease") },
-        { "dispel", Help("Dispel Magic") },
+        { "dispel", Any("Dispel Magic") },
         { "swp",    Harm("Shadow Word: Pain") },
         { "smite",  Harm("Smite") },
         { "mblast", Harm("Mind Blast") },
+        { "dplague", Harm("Devouring Plague") },
+        { "shackle", Harm("Shackle Undead") },
         { "rez",    Res("Resurrection") },
     },
 }
