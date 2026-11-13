@@ -15,8 +15,7 @@ local function Harm(spell)
 end
 -- Either side (Dispel Magic: cleanse a friend or purge an enemy): mouseover, else target. Never yourself.
 local function Any(spell)
-    return "#showtooltip " .. spell .. "
-/cast [@mouseover,exists,nodead][exists,nodead] " .. spell
+    return "#showtooltip " .. spell .. "\n/cast [@mouseover,exists,nodead][exists,nodead] " .. spell
 end
 -- Res: mouseover corpse, else dead target.
 local function Res(spell)
