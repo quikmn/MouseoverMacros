@@ -1,8 +1,11 @@
 ## Interface: 16001
 ## Title: MouseoverMacros
-## Notes: /mom creates or updates mouseover macros for your class (mouseover, then target; never yourself).
+## Notes: /mom: mouseover macros for your class (mouseover, then target; never yourself).
 ## Author: quikmn
 ## Version: 0.1.0
+## SavedVariables: MouseoverMacrosDB
 ## IconTexture: Interface\Icons\Spell_Holy_Renew
 
+Libs\LibStub\LibStub.lua
+Libs\EverlookUI\EverlookUI.lua
 MouseoverMacros.lua
