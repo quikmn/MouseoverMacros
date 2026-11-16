@@ -20,8 +20,7 @@ end
 -- Like Help, but with nobody to cast on it goes on you. Only for spells the owner asked for that way
 -- (Prayer of Healing: heals the target's party, and with no one else that's your own).
 local function HelpOrSelf(spell)
-    return "#showtooltip " .. spell .. "
-/cast [@mouseover,help,nodead][help,nodead][@player] " .. spell
+    return "#showtooltip " .. spell .. "\n/cast [@mouseover,help,nodead][help,nodead][@player] " .. spell
 end
 -- Res: mouseover corpse, else dead target.
 local function Res(spell)
