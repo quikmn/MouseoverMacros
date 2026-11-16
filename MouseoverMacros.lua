@@ -31,6 +31,8 @@ local MACROS = {
         { "dgrace", Help("Divine Grace") },
         { "shield", Help("Power Word: Shield") },
         { "fort",   Help("Power Word: Fortitude") },
+        { "dspirit", Help("Divine Spirit") },
+        { "fward",  Help("Fear Ward") },
         { "curedis", Help("Cure Disease") },
         { "dispel", Any("Dispel Magic") },
         { "swp",    Harm("Shadow Word: Pain") },
