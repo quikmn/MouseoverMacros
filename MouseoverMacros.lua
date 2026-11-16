@@ -17,6 +17,12 @@ end
 local function Any(spell)
     return "#showtooltip " .. spell .. "\n/cast [@mouseover,exists,nodead][exists,nodead] " .. spell
 end
+-- Like Help, but with nobody to cast on it goes on you. Only for spells the owner asked for that way
+-- (Prayer of Healing: heals the target's party, and with no one else that's your own).
+local function HelpOrSelf(spell)
+    return "#showtooltip " .. spell .. "
+/cast [@mouseover,help,nodead][help,nodead][@player] " .. spell
+end
 -- Res: mouseover corpse, else dead target.
 local function Res(spell)
     return "#showtooltip " .. spell .. "\n/cast [@mouseover,help,dead][help,dead] " .. spell
@@ -34,6 +40,7 @@ local MACROS = {
         { "dspirit", Help("Divine Spirit") },
         { "fward",  Help("Fear Ward") },
         { "sprot",  Help("Shadow Protection") },
+        { "poh",    HelpOrSelf("Prayer of Healing") },
         { "curedis", Help("Cure Disease") },
         { "dispel", Any("Dispel Magic") },
         { "swp",    Harm("Shadow Word: Pain") },
@@ -65,8 +72,11 @@ local function Install()
             EditMacro(index, name, nil, body)
             table.insert(updated, name)
         else
-            local _, numChar = GetNumMacros()
+            -- character macros first; when those are full, account macros (far more room)
+            local numAccount, numChar = GetNumMacros()
             if numChar < (MAX_CHARACTER_MACROS or 18) and CreateMacro(name, QUESTION_MARK, body, true) then
+                table.insert(created, name)
+            elseif numAccount < (MAX_ACCOUNT_MACROS or 120) and CreateMacro(name, QUESTION_MARK, body, false) then
                 table.insert(created, name)
             else
                 table.insert(failed, name)
