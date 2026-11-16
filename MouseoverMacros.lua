@@ -42,6 +42,7 @@ local MACROS = {
         { "poh",    HelpOrSelf("Prayer of Healing") },
         { "curedis", Help("Cure Disease") },
         { "dispel", Any("Dispel Magic") },
+        { "penance", Any("Penance") },  -- heals a friend, hurts an enemy: mouseover, else target; never you
         { "swp",    Harm("Shadow Word: Pain") },
         { "smite",  Harm("Smite") },
         { "mblast", Harm("Mind Blast") },
