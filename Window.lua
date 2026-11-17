@@ -113,6 +113,13 @@ local function PickUp(ref)
 end
 ns.PickUp = PickUp
 
+local EMPTY = {
+    mine = "Nothing made by /mom yet. Templates makes your class's mouseover set; \"New extended macro\" makes one past the slot limits.",
+    account = "No account macros yet. \"New account macro\" makes one.",
+    char = "No macros on this character yet. \"New character macro\" makes one.",
+    ext = "No extended macros yet. \"New extended macro\" makes one; they need no slot.",
+}
+
 local function MacroList(stack, which)
     UI.Input(stack, {
         placeholder = "Search names and text", width = 300,
@@ -125,7 +132,7 @@ local function MacroList(stack, which)
             return out
         end,
         rowHeight = 40,
-        empty = which == "ext" and "No extended macros yet. \"New extended macro\" makes one; they need no slot." or "Nothing here.",
+        empty = EMPTY[which] or "Nothing here.",
         icon = function(r) return r.icon or QM end,
         title = function(r)
             local tag = r.kind == "ext" and "  |cff40c0ffextended|r" or (r.ours and "  |cff62cf88made by /mom|r" or "")
