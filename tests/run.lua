@@ -103,6 +103,46 @@ end
 HideUIPanel = function(f) f:Hide() end
 SlashCmdList.MACRO = function() MOCK.blizzSlash = MOCK.blizzSlash + 1; ShowMacroFrame() end
 
+-- The ring: secure wraps are recorded (the tests run the snippet themselves); bags, items and spells stubbed.
+MOCK.wraps = {}
+SecureHandlerWrapScript = function(frame, script, header, pre) table.insert(MOCK.wraps, { frame = frame, script = script, header = header, pre = pre }) end
+MOCK.bags = { [0] = {}, [1] = {}, [2] = {}, [3] = {}, [4] = {} } -- bags[bag][slot] = { itemID, count }
+MOCK.items = {}  -- [itemID] = { name, ilvl, minLevel, classID, subclassID, subType, spell, unusable }
+MOCK.level = 30
+UnitLevel = function() return MOCK.level end
+C_Container = {
+	GetContainerNumSlots = function(bag) return MOCK.bags[bag] and 16 or 0 end,
+	GetContainerItemInfo = function(bag, slot)
+		local x = MOCK.bags[bag] and MOCK.bags[bag][slot]
+		if x then return { itemID = x[1], stackCount = x[2] } end
+	end,
+	GetItemCooldown = function() return 0, 0, 1 end,
+}
+C_Item = {
+	GetItemInfo = function(id)
+		local it = MOCK.items[id]
+		if it then return it.name, "link", 1, it.ilvl or 1, it.minLevel or 0, "Consumable", it.subType or "Consumable", 20, "", 1000 + id, 1, it.classID or 0, it.subclassID or 0 end
+	end,
+	GetItemSpell = function(id) local it = MOCK.items[id]; if it and it.spell then return it.spell, 1 end end,
+	GetItemCount = function(id)
+		local n = 0
+		for _, b in pairs(MOCK.bags) do for _, x in pairs(b) do if x[1] == id then n = n + x[2] end end end
+		return n
+	end,
+	IsUsableItem = function(id) local it = MOCK.items[id]; return not (it and it.unusable) end,
+}
+MOCK.known = {}  -- spell name -> ID: spells this character knows
+do
+	local base = C_Spell.GetSpellInfo
+	C_Spell.GetSpellInfo = function(x)
+		if type(x) == "string" and MOCK.known[x] then return { name = x, spellID = MOCK.known[x], iconID = 2000 + MOCK.known[x] } end
+		return base(x)
+	end
+end
+MOCK.cursor = nil -- { kind, a, b, c, d }
+GetCursorInfo = function() if MOCK.cursor then return unpack(MOCK.cursor) end end
+ClearCursor = function() MOCK.cursor = nil end
+
 local globalWrites = {}
 local addonEnv = setmetatable({}, { __index = _G, __newindex = function(_, k, v) globalWrites[k] = true; _G[k] = v end })
 
@@ -349,17 +389,20 @@ end)
 
 -- Phase 2: the macro manager -------------------------------------------------
 local KNOWN = { Renew = true, Heal = true, ["Inner Focus"] = true, ["Greater Heal"] = true, Shoot = true }
-C_Spell.GetSpellInfo = function(x) if KNOWN[x] then return { name = x } end end
-C_Item = { GetItemInfoInstant = function(x) if x == "Hearthstone" then return 6948 end end }
+C_Spell.GetSpellInfo = function(x)
+	if MOCK.known[x] then return { name = x, spellID = MOCK.known[x], iconID = 2000 + MOCK.known[x] } end
+	if KNOWN[x] then return { name = x } end
+end
+C_Item.GetItemInfoInstant = function(x) if x == "Hearthstone" then return 6948 end end
 GetMacroIcons = function(t) for _, v in ipairs({ 135953, 136000, "Spell_Holy_Renew", "INV_Misc_Bag_07" }) do t[#t + 1] = v end end
 GetMacroItemIcons = function(t) t[#t + 1] = 133784 end
 
 step("every section of the window opens", function()
-	for _, id in ipairs({ "mine", "account", "char", "ext", "templates", "edit", "backups", "options" }) do
+	for _, id in ipairs({ "mine", "account", "char", "ext", "templates", "edit", "backups", "ring", "options" }) do
 		ns.app:Open(id)
 		check(ns.app.sections[id].stack, id .. " not built")
 	end
-	check(#ns.app.order == 8 and ns.app.order[1] == "mine", "sidebar order")
+	check(#ns.app.order == 9 and ns.app.order[1] == "mine" and ns.app.order[8] == "ring" and ns.app.order[9] == "options", "sidebar order")
 	check(ns.CountsLine():find("Account", 1, true) and ns.CountsLine():find("Extended", 1, true), "counts line")
 	ns.app:Close()
 end)
@@ -879,6 +922,327 @@ step("/macro and the game menu open /mom (on the game macros); Blizzard's window
 	ns.app:Open("mine")
 	check(ns.EMPTY_MINE and ns.EMPTY_MINE:find("under Account and Character", 1, true), "Mine's empty text")
 	ns.app:Close()
+end)
+
+------------------------------------------------------------------------
+-- The ring
+------------------------------------------------------------------------
+local Ring = ns.Ring
+
+step("ring: picking a slice from the direction, the dead zone and the outer edge", function()
+	local all = {}
+	for i = 1, 8 do local x, y = Ring.TopVector(i); all[i] = { x, y } end
+	local function at(deg, r, slots, n, dead, outer)
+		local a = math.rad(deg)
+		return Ring.Pick(math.sin(a) * (r or 100), math.cos(a) * (r or 100), slots, n or 8, dead or 22, outer)
+	end
+	-- eight slices: 45 degrees each, slot 1 straight up, clockwise (0 degrees = up, 90 = right)
+	for deg = 1, 359, 4 do
+		local want = math.floor(((deg + 22.5) % 360) / 45) + 1
+		check(at(deg, 100, all) == want, ("8 slices: %d degrees gave %s, want %d"):format(deg, tostring(at(deg, 100, all)), want))
+	end
+	-- four (up, right, down, left): 90 degrees each
+	local four = { all[1], false, all[3], false, all[5], false, all[7], false }
+	check(at(40, 100, four) == 1 and at(50, 100, four) == 3 and at(181, 100, four) == 5 and at(260, 100, four) == 7, "4 slices")
+	check(Ring.Pick(1, 1, four, 8, 0) == 1, "a tie goes to the lower slot")
+	-- the dead zone cancels; its edge already picks
+	check(at(90, 21, all) == nil and Ring.Pick(0, 0, all, 8, 22) == nil, "inside the dead zone")
+	check(at(90, 22, all) == 3, "on the edge of the dead zone")
+	check(at(90, 300, all, 8, 22, 200) == nil and at(90, 150, all, 8, 22, 200) == 3, "beyond the outer edge (sub-ring clicks)")
+	check(Ring.Pick(50, 50, { false, false }, 2, 22) == nil, "an empty ring picks nothing")
+	-- sub-rings: n evenly, the first at the top
+	local three = {}
+	for i = 1, 3 do local x, y = Ring.SubVector(i, 3); three[i] = { x, y } end
+	check(at(0, 100, three, 3) == 1 and at(120, 100, three, 3) == 2 and at(240, 100, three, 3) == 3 and at(59, 100, three, 3) == 1 and at(61, 100, three, 3) == 2, "3 in a sub-ring")
+	check(Ring.Dir("right") == 3 and Ring.Dir("Up-Left") == 8 and Ring.Dir("5") == 5 and Ring.Dir("sideways") == nil, "direction words")
+end)
+
+-- A character with a bag full of consumables.
+local function Bag(list) local b = {}; for i, x in ipairs(list) do b[i] = x end; return b end
+MOCK.items = {
+	[100] = { name = "Tough Jerky", spell = "Food", minLevel = 5, ilvl = 15 },
+	[101] = { name = "Roasted Quail", spell = "Food", minLevel = 35, ilvl = 45 },              -- level 35: too high
+	[102] = { name = "Smoked Desert Dumplings", spell = "Food", minLevel = 25, ilvl = 45 },
+	[103] = { name = "Conjured Sourdough", spell = "Food", minLevel = 25, ilvl = 35 },
+	[110] = { name = "Refreshing Spring Water", spell = "Drink", minLevel = 5, ilvl = 15 },
+	[112] = { name = "Moonberry Juice", spell = "Drink", minLevel = 25, ilvl = 35 },
+	[113] = { name = "Bottled Winterspring Water", classID = 0, subclassID = 5, minLevel = 25, ilvl = 30 }, -- retail class data only
+	[120] = { name = "Healing Potion", spell = "Healing Potion", minLevel = 12, ilvl = 22 },
+	[121] = { name = "Greater Healing Potion", spell = "Healing Potion", minLevel = 21, ilvl = 31 },
+	[130] = { name = "Mana Potion", spell = "Restore Mana", minLevel = 22, ilvl = 32, unusable = true }, -- the game says not usable
+	[131] = { name = "Lesser Mana Potion", spell = "Restore Mana", minLevel = 14, ilvl = 24 },
+	[140] = { name = "Heavy Silk Bandage", spell = "First Aid", ilvl = 40 },
+	[141] = { name = "Silk Bandage", spell = "First Aid", ilvl = 30 },
+	[150] = { name = "Shiny Bauble", spell = "Increase Fishing" },
+	[160] = { name = "Strong Fishing Pole", classID = 2, subclassID = 20, subType = "Fishing Poles", minLevel = 10, ilvl = 20 },
+	[161] = { name = "Fishing Pole", classID = 2, subclassID = 20, subType = "Fishing Poles", ilvl = 5 },
+	[6948] = { name = "Hearthstone", spell = "Hearthstone" },
+	[200] = { name = "Linen Cloth", classID = 7 },
+}
+
+step("ring: the best food, drink, potions and bandage from the bags", function()
+	MOCK.bags[0] = Bag({ { 100, 20 }, { 101, 5 }, { 102, 3 }, { 103, 12 }, { 110, 10 }, { 112, 4 }, { 113, 2 }, { 200, 20 } })
+	MOCK.bags[1] = Bag({ { 120, 2 }, { 121, 1 }, { 130, 3 }, { 131, 5 }, { 140, 5 }, { 141, 10 }, { 150, 2 }, { 160, 1 }, { 161, 1 }, { 6948, 1 }, { 102, 2 } })
+	local items = Ring.ScanBags()
+	local function best(cat) local it = Ring.Best(items, cat); return it and it.id end
+	check(best("food") == 102, "food: usable, level 25, the higher item level (not Roasted Quail at level 35): " .. tostring(best("food")))
+	check(best("drink") == 112, "drink: " .. tostring(best("drink")))
+	check(best("hpot") == 121 and best("mpot") == 131, "potions: Greater Healing; Lesser Mana because the game says Mana Potion is not usable")
+	check(best("bandage") == 140 and best("lure") == 150 and best("pole") == 160, "bandage, lure, pole")
+	for _, it in ipairs(items) do if it.id == 102 then check(it.count == 5, "stacks in several bags add up") end end
+	check(Ring.Classify(MOCK.items[113]).drink and not Ring.Classify(MOCK.items[200]).food, "item class decides when there is no use spell")
+	-- at level 40 the quail becomes the best
+	MOCK.level = 40
+	check(Ring.Best(Ring.ScanBags(), "food").id == 101, "after levelling up")
+	MOCK.level = 30
+	-- the dynamic slices give macro text for the secure buttons
+	local ctx = Ring.Context()
+	local food = Ring.Expand({ kind = "food" }, ctx)[1]
+	check(food.macrotext == "/use item:102" and food.itemID == 102, "food slice: " .. tostring(food.macrotext))
+	local lure = Ring.Expand({ kind = "lures" }, ctx)[1]
+	check(lure.macrotext == "/use item:150\n/use 16", "a lure goes on the fishing pole")
+	check(Ring.Expand({ kind = "fishgear" }, ctx)[1].macrotext == "/equip Strong Fishing Pole", "no Fishing set: the best pole")
+	check(#Ring.Expand({ kind = "buffs" }, ctx) == 0, "no buff spells known yet")
+	MOCK.known = { ["Power Word: Fortitude"] = 1243, ["Inner Fire"] = 588, Fishing = 7620, Tailoring = 3908, Disenchant = 13262, ["Basic Campfire"] = 818 }
+	local buffs = Ring.Expand({ kind = "buffs" }, ctx)
+	check(#buffs == 2 and buffs[1].macrotext == "/cast Power Word: Fortitude" and buffs[2].macrotext == "/cast Inner Fire", "the priest's buffs that are known")
+	for _, b in ipairs(buffs) do check(not b.macrotext:find("@player"), "a buff never targets you by itself") end
+	local prof = Ring.Expand({ kind = "professions" }, ctx)
+	check(#prof == 1 and prof[1].label == "Tailoring", "professions (Disenchant and the campfire have their own slices)")
+	check(Ring.Expand({ kind = "campfire" }, ctx)[1].macrotext == "/cast Basic Campfire", "campfire")
+	C_EquipmentSet = {
+		GetEquipmentSetIDs = function() return { 1, 2 } end,
+		GetEquipmentSetInfo = function(id) if id == 1 then return "Healing", 111 end return "Fishing", 222 end,
+	}
+	check(Ring.Expand({ kind = "fishgear" }, ctx)[1].macrotext == "/equipset [equipped:Fishing Poles] Healing; Fishing", "a Fishing set toggles")
+end)
+
+-- The restricted environment, simulated: frame handles over the mock frames, one environment per header.
+local header = MoMRingHeader
+local renv
+local function Handle(f)
+	if not f then return nil end
+	return setmetatable({}, { __index = {
+		GetAttribute = function(_, k) return f.__attrs[k] end,
+		SetAttribute = function(_, k, v) f.__attrs[k] = v end, -- restricted code may, also in combat
+		Show = function() f:Show() end,
+		Hide = function() f:Hide() end,
+		ClearAllPoints = function() end,
+		SetPoint = function() end,
+		GetFrameRef = function(_, name) return Handle(Ring.refs[name]) end,
+		GetMousePosition = function() return MOCK.mx, MOCK.my end,
+		GetWidth = function() return 1000 end,
+		GetHeight = function() return 1000 end,
+		SetBindingClick = function(_, _, key, name, button) MOCK.ringBinds[key] = name .. " " .. button end,
+		ClearBindings = function() MOCK.ringBinds = {} end,
+	} })
+end
+MOCK.ringBinds = {}
+-- Click a wrapped button at a mouse position (0..1 of the screen). Returns what the snippet returned
+-- and, when the click went on to the action, the action.
+local function Click(frame, button, down, mx, my)
+	MOCK.mx, MOCK.my = mx, my
+	local snippet
+	for _, w in ipairs(MOCK.wraps) do if w.frame == frame then snippet = w.pre end end
+	check(snippet, "button not wrapped")
+	local fn = assert(loadstring("local self, button, down = ...\n" .. snippet))
+	renv = renv or setmetatable({}, { __index = { owner = Handle(header) } }) -- nothing else: no globals in restricted code
+	setfenv(fn, renv)
+	local r = fn(Handle(frame), button, down)
+	if r == false then return false end
+	return r, frame.__attrs.type, frame.__attrs.macrotext or frame.__attrs.macro
+end
+local function shownRing()
+	local open = {}
+	for r = 0, 8 do if Ring.refs["ring" .. r]:IsShown() then open[#open + 1] = r end end
+	return table.concat(open, ",")
+end
+
+step("ring: the key's press opens it, the release picks; sub-rings, clicks, the dead zone and Escape (secure snippet)", function()
+	check(MoMRingTrigger and MoMRingCatcher and MoMRingTrigger.__protected and MoMRingCatcher.__protected, "secure buttons")
+	check(MOCK.wraps[1].header == header and MOCK.wraps[2].header == header and MOCK.wraps[1].script == "OnClick", "wrapped in the header")
+	check(MoMRingTrigger.__attrs.useOnKeyDown == false, "the trigger acts on the release")
+	check(Ring.Rebuild(), "rebuilt")
+	local trig, catch = MoMRingTrigger, MoMRingCatcher
+	-- the slices carry their action and direction as attributes
+	local up = Ring.refs.s0_1
+	check(up.__protected and up.__attrs.on and up.__attrs.type == "macro" and up.__attrs.macrotext == "/use item:6948", "up: Hearthstone")
+	check(Ring.refs.s0_3.__attrs.sub == 3 and Ring.refs.s0_3.__attrs.type == nil, "right: the Consumables sub-ring")
+	check(Ring.refs.s0_2.__attrs.on == nil, "up-right: empty")
+	-- quick flick up: press, release up -> Hearthstone at once
+	check(Click(trig, "LeftButton", true, 0.5, 0.5) == false and shownRing() == "0", "the press shows the ring")
+	check(header.__attrs.cx == 500 and header.__attrs.cy == 500, "centred on the cursor")
+	local r, kind, text = Click(trig, "LeftButton", false, 0.51, 0.62)
+	check(r == "LeftButton" and kind == "macro" and text == "/use item:6948" and shownRing() == "", "flick up: " .. tostring(text))
+	-- release in the middle: nothing
+	Click(trig, "LeftButton", true, 0.3, 0.3)
+	check(Click(trig, "LeftButton", false, 0.31, 0.3) == false and shownRing() == "", "the dead zone cancels")
+	-- right: the sub-ring opens around the same point; the catcher takes clicks; Escape is bound
+	Click(trig, "LeftButton", true, 0.5, 0.5)
+	check(Click(trig, "LeftButton", false, 0.62, 0.5) == false and shownRing() == "3" and catch:IsShown(), "sub-ring open")
+	check(MOCK.ringBinds.ESCAPE == "MoMRingCatcher RightButton", "Escape closes it")
+	-- its first slice (top) is the best food; a click toward it uses it
+	local sub = Ring.layout[3]
+	check(sub.slots[1].macrotext == "/use item:102", "the sub-ring's first slice is the best food")
+	check(Click(catch, "LeftButton", true, 0.5, 0.6) == false, "the press of a click does nothing")
+	r, kind, text = Click(catch, "LeftButton", false, 0.5, 0.6)
+	check(r == "LeftButton" and text == "/use item:102" and shownRing() == "" and not catch:IsShown() and next(MOCK.ringBinds) == nil, "click: food, closed")
+	-- the key again instead of a click: the release toward a slice uses it
+	Click(trig, "LeftButton", true, 0.5, 0.5)
+	Click(trig, "LeftButton", false, 0.62, 0.5)
+	local vx, vy = sub.slots[2].vx, sub.slots[2].vy
+	check(Click(trig, "LeftButton", true, 0.5, 0.5) == false and shownRing() == "3", "a second press keeps the sub-ring")
+	r, kind, text = Click(trig, "LeftButton", false, 0.5 + vx * 0.1, 0.5 + vy * 0.1)
+	check(r and text == "/use item:112", "second slice: the best drink, " .. tostring(text))
+	-- right click (Escape is a right click on the catcher), a click far away: closed, nothing used
+	Click(trig, "LeftButton", true, 0.5, 0.5); Click(trig, "LeftButton", false, 0.62, 0.5)
+	check(Click(catch, "RightButton", true, 0.5, 0.6) == false and shownRing() == "" and not catch:IsShown(), "right click closes")
+	Click(trig, "LeftButton", true, 0.5, 0.5); Click(trig, "LeftButton", false, 0.62, 0.5)
+	check(Click(catch, "LeftButton", false, 0.95, 0.5) == false and shownRing() == "", "a click far outside closes")
+	-- the snippet agrees with Ring.Pick (what the picture highlights) all the way round
+	local v = {}
+	for i = 1, 8 do local e = Ring.layout[0].slots[i]; v[i] = e and { e.vx, e.vy } or false end
+	for k = 0, 71 do
+		local a = math.rad(k * 5 + 1)
+		Click(trig, "LeftButton", true, 0.5, 0.5)
+		local _, _, got = Click(trig, "LeftButton", false, 0.5 + math.sin(a) * 0.1, 0.5 + math.cos(a) * 0.1)
+		local e = Ring.layout[0].slots[Ring.Pick(math.sin(a) * 100, math.cos(a) * 100, v, 8, Ring.DEAD)]
+		if e.sub then
+			check(got == nil and shownRing() == tostring(e.sub), "angle " .. (k * 5 + 1) .. ": sub-ring " .. e.sub)
+			Click(catch, "RightButton", true, 0.5, 0.5)
+		else
+			check(got == e.macrotext, "angle " .. (k * 5 + 1) .. ": " .. tostring(got))
+		end
+	end
+end)
+
+step("ring: the picture fades in, follows the cursor and fades out; no OnUpdate while closed", function()
+	local d = Ring.displays[0]
+	for _, x in pairs(Ring.displays) do Ring.DisplayUpdate(x, 0.1) end -- the fades from the clicks above
+	check(not d:IsShown(), "closed: hidden, so its OnUpdate doesn't run")
+	Click(MoMRingTrigger, "LeftButton", true, 0.5, 0.5)
+	check(d:IsShown() and d:GetAlpha() == 0, "shown, starting transparent")
+	Ring.DisplayUpdate(d, 0.04)
+	check(d:GetAlpha() > 0 and d:GetAlpha() < 1, "fading in")
+	Ring.DisplayUpdate(d, 0.05)
+	check(d:GetAlpha() == 1, "faded in within 0.1 s")
+	-- the mock cursor is at 400, 300 and the centre at 500, 500: down and a bit left -> down (5)
+	check(d.lit == 5 and d.tiles[5].label:IsShown() and not d.tiles[3].label:IsShown(), "highlights down, with its label")
+	check(d.tiles[1].count:GetText() == "", "one Hearthstone: no count")
+	Click(MoMRingTrigger, "LeftButton", false, 0.5, 0.5)
+	check(d:IsShown(), "still fading out")
+	Ring.DisplayUpdate(d, 0.1)
+	check(not d:IsShown(), "gone within 0.1 s")
+	-- a stack shows its count; a used-up item shows greyed
+	local sd = Ring.displays[3]
+	Click(MoMRingTrigger, "LeftButton", true, 0.5, 0.5); Click(MoMRingTrigger, "LeftButton", false, 0.62, 0.5)
+	check(sd.tiles[1].count:GetText() == 5 and sd.tiles[1].icon:GetAlpha() == 1, "dumplings: 5")
+	Click(MoMRingCatcher, "RightButton", true, 0.5, 0.5)
+	MOCK.combat = true
+	MOCK.bags[0][3], MOCK.bags[1][11] = nil, nil -- every dumpling eaten in combat
+	Click(MoMRingTrigger, "LeftButton", true, 0.5, 0.5); Click(MoMRingTrigger, "LeftButton", false, 0.62, 0.5)
+	check(sd.tiles[1].icon:GetAlpha() < 1 and sd:IsShown(), "used up: greyed, still there until combat ends")
+	Click(MoMRingCatcher, "RightButton", true, 0.5, 0.5)
+	MOCK.Fire("BAG_UPDATE_DELAYED")
+	MOCK.RunTimers()
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	check(Ring.layout[3].slots[1].macrotext == "/use item:103", "after combat the next best food takes its place")
+end)
+
+step("ring: changes in combat wait for combat to end (bags, the editor, the key)", function()
+	check(not Ring.dirty, "clean")
+	local s31 = Ring.refs.s3_1
+	local before = s31.__attrs.macrotext
+	MOCK.combat = true
+	MOCK.bags[2] = Bag({ { 101, 1 } })
+	MOCK.level = 40 -- the quail is now usable and the best
+	MOCK.Fire("BAG_UPDATE_DELAYED")
+	MOCK.RunTimers() -- the rebuild runs, sees combat, waits (the mock throws on SetAttribute in combat)
+	check(Ring.dirty and s31.__attrs.macrotext == before, "frozen in combat")
+	MOCK.log = {}
+	Ring.Command("set upright food")
+	check(logHas("when combat ends") and Ring.refs.s0_2.__attrs.on == nil, "an edit in combat waits")
+	local ok, msg = Ring.SetKey("BUTTON4")
+	check(ok and msg:find("after combat", 1, true) and MOCK.bindings.BUTTON3 == "MoMRingTrigger" and not MOCK.bindings.BUTTON4, "the key waits too")
+	-- still works in combat with what it had
+	Click(MoMRingTrigger, "LeftButton", true, 0.5, 0.5)
+	local _, _, text = Click(MoMRingTrigger, "LeftButton", false, 0.51, 0.62)
+	check(text == "/use item:6948", "the ring works in combat")
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	check(not Ring.dirty and s31.__attrs.macrotext == "/use item:101", "rebuilt after combat: " .. tostring(s31.__attrs.macrotext))
+	check(Ring.refs.s0_2.__attrs.on and Ring.refs.s0_2.__attrs.macrotext == "/use item:101", "the edit applied")
+	check(MOCK.bindings.BUTTON4 == "MoMRingTrigger" and not MOCK.bindings.BUTTON3, "the key moved")
+	MOCK.level = 30
+	Ring.Command("clear upright")
+	Ring.SetKey("BUTTON3")
+end)
+
+step("ring: the key goes through /mom's bindings; off gives the button back; left/right click refused", function()
+	check(MOCK.bindings.BUTTON3 == "MoMRingTrigger", "middle mouse opens the ring")
+	local _, _, id = ns.CreateExt("RingKeyTest", nil, "/say hi")
+	ns.BindExt(ns.ExtRef(id), "F7")
+	check(MOCK.bindings.F7 == "MoMX_" .. id and MOCK.bindings.BUTTON3 == "MoMRingTrigger", "both bound")
+	SlashCmdList.MOUSEOVERMACROS("ring off")
+	check(MOCK.bindings.BUTTON3 == nil and MOCK.bindings.F7 == "MoMX_" .. id, "off: middle mouse is the game's again")
+	SlashCmdList.MOUSEOVERMACROS("ring on")
+	check(MOCK.bindings.BUTTON3 == "MoMRingTrigger", "on again")
+	local ok = Ring.SetKey("BUTTON1")
+	check(not ok and ns.db.ring.key == "BUTTON3", "left click alone refused")
+	check(Ring.SetKey("SHIFT-BUTTON2") and MOCK.bindings["SHIFT-BUTTON2"] == "MoMRingTrigger", "shift + right click is fine")
+	Ring.SetKey("BUTTON3")
+	ns.DeleteExt(ns.ExtRef(id))
+end)
+
+step("ring: the Ring page and /mom ring edit it (drop, sub-ring, reorder, reset)", function()
+	ns.app:Open("ring")
+	local c = Ring.compass
+	check(c and #c.tiles == 8, "the compass")
+	-- click Left, drop the Hearthstone on it: Left is a sub-ring, so it is added there
+	c.tiles[7]:GetScript("OnClick")(c.tiles[7])
+	check(Ring.Selected() == 7, "Left selected")
+	MOCK.cursor = { "item", 6948 }
+	c.tiles[7]:GetScript("OnReceiveDrag")(c.tiles[7])
+	local left = ns.db.ring.top[7]
+	check(left.kind == "ring" and left.items[#left.items].kind == "item" and left.items[#left.items].id == 6948 and MOCK.cursor == nil, "added to Professions")
+	-- a spell dropped on an empty direction becomes that direction
+	MOCK.cursor = { "spell", 5, "spell", 7620 }
+	C_Spell.GetSpellName = function(id) return id == 7620 and "Fishing" or ("Spell" .. id) end
+	c.tiles[2]:GetScript("OnReceiveDrag")(c.tiles[2])
+	check(ns.db.ring.top[2].kind == "spell" and ns.db.ring.top[2].name == "Fishing" and Ring.refs.s0_2.__attrs.macrotext == "/cast Fishing", "up-right: Fishing")
+	-- reorder inside a sub-ring, remove, make single, swap
+	Ring.MoveItem(7, #left.items, -1)
+	check(left.items[#left.items - 1].id == 6948, "moved up")
+	Ring.RemoveItem(7, #left.items - 1)
+	check(left.items[#left.items].kind ~= "item", "removed")
+	Ring.Swap(2, 8)
+	check(ns.db.ring.top[2] == false and ns.db.ring.top[8].name == "Fishing", "swapped")
+	SlashCmdList.MOUSEOVERMACROS("ring add upleft hpot")
+	check(ns.db.ring.top[8].kind == "ring" and ns.db.ring.top[8].items[1].name == "Fishing" and ns.db.ring.top[8].items[2].kind == "hpot", "add makes a sub-ring")
+	SlashCmdList.MOUSEOVERMACROS("ring sub upleft Quick")
+	check(ns.db.ring.top[8].name == "Quick", "renamed")
+	ns.app:Refresh()
+	MOCK.log = {}
+	SlashCmdList.MOUSEOVERMACROS("ring list")
+	check(logHas("Right") and logHas("Consumables") and logHas("Quick"), "list")
+	SlashCmdList.MOUSEOVERMACROS("ring set sideways food")
+	check(logHas("which direction"), "a bad direction says so")
+	SlashCmdList.MOUSEOVERMACROS("ring set up nothing-called-this")
+	check(logHas("no slice called"), "an unknown slice says so")
+	SlashCmdList.MOUSEOVERMACROS("ring reset")
+	check(ns.db.ring.top[8] == false and ns.db.ring.top[3].name == "Consumables" and ns.db.ring.key == "BUTTON3", "reset keeps the key")
+	ns.app:Close()
+end)
+
+step("ring: never touches other windows (UIPanelWindows, Show/HideUIPanel, UISpecialFrames, closing windows)", function()
+	for _, file in ipairs({ "RingData.lua", "Ring.lua", "RingPage.lua" }) do
+		local src = assert(io.open(ROOT .. "/" .. file)):read("*a")
+		for _, bad in ipairs({ "UIPanelWindows", "ShowUIPanel", "HideUIPanel", "UISpecialFrames", "CloseAllWindows", "CloseSpecialWindows", "CloseWindows" }) do
+			check(not src:find(bad, 1, true), file .. " uses " .. bad)
+		end
+	end
+	check(next(UISpecialFrames) == nil, "UISpecialFrames touched")
 end)
 
 step("the player's macros were never changed", function()
