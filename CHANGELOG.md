@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Set key: clicking it again while it waits cancels (it no longer asks again in chat), and the button reads "Press a key..." while it waits. Shift, Ctrl, Alt and the Windows key on their own are no longer taken as the key.
+- The window's title reads "Mouseover Macros" (it was cut off as "MouseoverM..."). The icon button "? (follows the spell)" is now "Icon from the spell".
 - Extended macros fire when you press their key, not when you let go. The one-line bar macro now clicks on the press too; bar macros made by earlier versions are updated at login (out of combat).
 - Macro lists: an empty list says how to make the first one. A game macro that is too long says an extended macro takes up to 1023 characters.
 - Character macros: /mom now counts the client's real limit (30 per character on this client; it read 18 before, so it said "full" too early and put macros in account slots).

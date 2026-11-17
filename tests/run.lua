@@ -587,6 +587,35 @@ step("Set key: closing the window cancels it, so a later key press is not bound"
 	ns.DeleteExt(ns.ExtRef(id))
 end)
 
+-- The first button row on a page whose first button reads `label`.
+local function rowWith(section, label)
+	for _, w in ipairs(ns.app.sections[section].stack.widgets) do
+		if w.buttons and w.buttons[1] and w.buttons[1]:GetText() == label then return w end
+	end
+end
+
+step("Set key: a second click cancels (one chat line each); modifier keys alone are never bound", function()
+	local _, _, id = ns.CreateExt("KeyTwice", nil, "/say key")
+	ns.Edit(ns.ExtRef(id))
+	local row = rowWith("edit", "Set key")
+	check(row, "no Set key row")
+	local set = row.buttons[1]
+	local n = #MOCK.log
+	set:GetScript("OnClick")(set)
+	check(ns.keyCapture:IsShown() and set:GetText() == "Press a key...", "not waiting: " .. tostring(set:GetText()))
+	set:GetScript("OnClick")(set)
+	check(not ns.keyCapture:IsShown() and set:GetText() == "Set key", "second click did not cancel")
+	check(#MOCK.log - n == 2 and last():find("key not changed", 1, true), "chat lines: " .. (#MOCK.log - n))
+	set:GetScript("OnClick")(set)
+	local press = ns.keyCapture:GetScript("OnKeyDown")
+	for _, k in ipairs({ "LSHIFT", "RCTRL", "LALT", "LMETA", "RMETA" }) do press(ns.keyCapture, k) end
+	check(ns.keyCapture:IsShown() and not MouseoverMacrosCharDB.binds[id], "a modifier alone was taken")
+	press(ns.keyCapture, "F7")
+	check(not ns.keyCapture:IsShown() and MouseoverMacrosCharDB.binds[id] == "F7" and set:GetText() == "Set key", "F7 not bound")
+	ns.app:Close()
+	ns.DeleteExt(ns.ExtRef(id))
+end)
+
 step("delete in the editor: a fresh editor of the same kind; the macro's history goes with it", function()
 	local _, _, id = ns.CreateExt("DelMe", nil, "/say one")
 	ns.SaveExt(ns.ExtRef(id), "DelMe", nil, "/say two")

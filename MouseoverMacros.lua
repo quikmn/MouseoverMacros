@@ -344,7 +344,8 @@ ns.queue = queue
 -- Window and chat
 ------------------------------------------------------------------------
 local app = UI:NewApp({
-    name = "MouseoverMacros",
+    name = "Mouseover Macros", -- two words: the sidebar wraps it instead of cutting it off
+    frameName = "MouseoverMacros",
     addon = ADDON,
     slash = "/mom",
     tagline = "Your macros: mouseover sets, extended macros past the slot limits, backups.",

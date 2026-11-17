@@ -299,9 +299,9 @@ app:Section("edit", "Edit", function(stack)
     tex:SetPoint("LEFT")
     local change = UI.Button(iconRow, "Change icon", function() ed.picking = not ed.picking; stack:RefreshAll() end, 120)
     change:SetPoint("LEFT", 36, 0)
-    local dyn = UI.Button(iconRow, "? (follows the spell)", function() ed.icon = QM; stack:RefreshAll() end, 170)
+    local dyn = UI.Button(iconRow, "Icon from the spell", function() ed.icon = QM; stack:RefreshAll() end, 170)
     dyn:SetPoint("LEFT", change, "RIGHT", 8, 0)
-    UI.Tooltip(dyn, "Dynamic icon", "The question mark icon: with #showtooltip the button shows the icon of the spell it will cast.")
+    UI.Tooltip(dyn, "Icon from the spell", "Uses the question mark icon: with #showtooltip on the first line, the button shows the icon of the spell it will cast.")
     function iconRow:Refresh() tex:SetTexture(ed.icon or QM) end
     stack:Add(iconRow, 28)
     iconRow:Refresh()
@@ -421,6 +421,8 @@ app:Section("edit", "Edit", function(stack)
     })
 
     -- extended: key binding and bar macro
+    -- a modifier on its own is not a key to bind (the Windows key neither: it opens the Start menu)
+    local MODIFIER_ONLY = { LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true, LALT = true, RALT = true, LMETA = true, RMETA = true }
     local capture = CreateFrame("Frame", nil, UIParent)
     UI.Note(stack, function()
         if not ed.ref or ed.ref.kind ~= "ext" then return "" end
@@ -433,7 +435,7 @@ app:Section("edit", "Edit", function(stack)
     capture:EnableKeyboard(true)
     capture:SetFrameStrata("FULLSCREEN_DIALOG")
     capture:SetScript("OnKeyDown", function(self, key)
-        if key == "LSHIFT" or key == "RSHIFT" or key == "LCTRL" or key == "RCTRL" or key == "LALT" or key == "RALT" then return end
+        if MODIFIER_ONLY[key] then return end -- keep waiting for a real key
         self:Hide()
         if key == "ESCAPE" then app:Print("key not changed."); app:Refresh() return end
         local combo = (IsAltKeyDown() and "ALT-" or "") .. (IsControlKeyDown() and "CTRL-" or "") .. (IsShiftKeyDown() and "SHIFT-" or "") .. key
@@ -449,6 +451,8 @@ app:Section("edit", "Edit", function(stack)
     UI.ButtonRow(stack, {
         { label = "Set key", width = 100, onClick = function()
             if not ed.ref or ed.ref.kind ~= "ext" then return end
+            -- a second click while it waits cancels, so it never asks twice
+            if capture:IsShown() then cancelCapture(); app:Refresh() return end
             capture:Show()
             app:Print("press the key (with Shift / Ctrl / Alt if you like) for " .. Esc(ed.ref.name) .. "; Escape cancels.")
             app:Refresh()
@@ -463,6 +467,7 @@ app:Section("edit", "Edit", function(stack)
         refresh = function(row)
             local on = ed.ref ~= nil and ed.ref.kind == "ext"
             for _, b in ipairs(row.buttons) do b:SetShown(on) end
+            row.buttons[1]:SetText(capture:IsShown() and "Press a key..." or "Set key")
         end,
     })
 
