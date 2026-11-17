@@ -527,11 +527,19 @@ app:Command("create", "create <macro>", "create or update one macro", function(r
     local e = NamedEntry(rest, "create")
     if e then InstallOne(e) end
 end, { "update" })
+-- "/mom on <macro>" and "/mom off <macro>"; with a setting's name instead ("/mom off ring", "/mom on takeover") they
+-- switch that setting, as in every EverlookDB addon.
+local function SettingInstead(rest, verb)
+    local word = rest:match("^%s*(%S+)")
+    if word and not ns.Find(word) and app:GetSetting(word) then UI.Verbs[verb](app, UI.Util.Trim(rest), verb) return true end
+end
 app:Command("on", "on <macro>", "include a macro in /mom install", function(rest)
+    if SettingInstead(rest, "on") then return end
     local e = NamedEntry(rest, "on")
     if e then db.off[e.key] = nil; app:Refresh(); app:Print(e.key .. ": on") end
 end)
 app:Command("off", "off <macro>", "leave a macro out of /mom install", function(rest)
+    if SettingInstead(rest, "off") then return end
     local e = NamedEntry(rest, "off")
     if e then db.off[e.key] = true; app:Refresh(); app:Print(e.key .. ": off") end
 end)
@@ -556,8 +564,7 @@ ns.SpellIcon = SpellIcon
 ns.InstallOne = InstallOne
 ns.Where = Where
 
-SLASH_MOUSEOVERMACROS1 = "/mom"
-SlashCmdList.MOUSEOVERMACROS = function(msg) app:HandleSlash(msg) end
+app:RegisterSlash("MOUSEOVERMACROS") -- /mom
 
 local f = CreateFrame("Frame")
 f:RegisterEvent("ADDON_LOADED")

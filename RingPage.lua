@@ -500,14 +500,7 @@ local function RingCommand(rest)
         end
         return
     end
-    if verb == "reset" then
-        local key, on = Ring().key, Ring().on
-        ns.db.ring = R.Defaults()
-        ns.db.ring.key, ns.db.ring.on = key, on
-        Changed()
-        Say(true, "the ring is back to the default (your key stays).")
-        return
-    end
+    if verb == "reset" then app:HandleReset("ring") return end -- asks first, like /mom reset ring
     local dirWord, tail = args:match("^(%S*)%s*(.-)$")
     local i = R.Dir(dirWord)
     if not i then Say(false, "which direction? up, upright, right, downright, down, downleft, left, upleft (or 1-8). /mom ring help") return end
@@ -538,3 +531,10 @@ end
 R.Command = RingCommand
 
 app:Command("ring", "ring [help|on|off|key|list|set|add|sub|clear|swap|reset]", "the ring: hold a key, flick toward a slice (/mom ring help)", RingCommand)
+-- "/mom reset ring" (or "/mom ring reset"): the default slices back; your key and on/off stay. Asks first.
+app:Reset("ring", "the ring's slices (your key stays)", function()
+    local key, on = Ring().key, Ring().on
+    ns.db.ring = R.Defaults()
+    ns.db.ring.key, ns.db.ring.on = key, on
+    Changed()
+end)

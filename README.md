@@ -34,6 +34,19 @@ A sub-ring (blue corner) opens its own ring around the same point. Click a slice
 
 **Editing:** the **Ring** page in `/mom`. Set the key (any key or mouse button, with Shift / Ctrl / Alt), switch the ring off (the key does what it did before), click a direction to edit it, drag spells, items, macros, mounts or equipment sets onto a direction (onto a sub-ring they are added to it), drag one direction onto another to swap them, make a direction a sub-ring, add dynamic slices ("Best food", "Your buffs", "Fishing lures" ...) or extended macros, reorder and remove. In chat: `/mom ring help`, for example `/mom ring key BUTTON4`, `/mom ring set upright Fishing`, `/mom ring add down hpot`, `/mom ring swap left right`, `/mom ring reset`.
 
+## Chat commands
+
+`/mom` follows the same pattern as every EverlookDB addon:
+
+- `/mom`: the window. `/mom help` (or `?`) lists every command; a mistyped one suggests the nearest.
+- `/mom install`: create or update every switched-on macro; `/mom create <macro>` one of them; `/mom list` your class's macros.
+- `/mom off <macro>`, `/mom on <macro>`: leave a macro out of `/mom install`, or put it back.
+- `/mom new`, `/mom blizzard`: a new macro in the editor, Blizzard's own macro window.
+- `/mom ring help`: the ring's own commands.
+- `/mom takeover off` or `/mom set takeover off`: change a setting (`/mom get` lists them; `/mom off takeover` works too).
+- `/mom reset ring` (or `/mom ring reset`): the ring's default slices back, your key stays; type it twice within 10 seconds.
+- `/mom search <words>`: the window with its search box filled; `/mom status`, `/mom version`.
+
 ## Which macros /mom changes
 
 Its macros are named `_mom` plus four random digits (for example `_mom4821`), never a name already in use, and /mom remembers which ones it made (account macros for the account, character macros per character). On its own it only ever updates those, in place, so your bars keep working; it never touches a macro of yours, even one with the same name. Old plain-named /mom macros (`heal`, `fort`, ...) are renamed to `_mom` names at login if their text is exactly what an older /mom wrote. Bar addons show the macro name under the button; Bartender4's "Hide Macro Text" hides it.
