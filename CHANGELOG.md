@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New macros: Shadow Word: Death, and the group buffs Prayer of Fortitude, Prayer of Spirit and Prayer of Shadow Protection (they show as not learned until you have them).
+
 - A macro window: Mine, Account, Character, Extended, Templates, Edit, Backups and Options in the sidebar. Search, slot counters, and an editor for any macro (yours too: /mom only limits what it changes on its own) with an icon picker, a live character count, a check that spell and item names exist, quick inserts for conditionals, Save as copy, Move to account / character (when there is room), Delete (click twice) and Pick up.
 - Extended macros: as many as you like, up to 1023 characters, no macro slot. Run one with a key binding (per character), or put it on a bar through a one-line _mom macro (one slot).
 - Backups: every save keeps the last 10 versions of a macro; deleted macros go to a bin (last 20) and can be restored. Export a set of macros as text and import it again (on any character, as extended, character or account macros; nothing is replaced).

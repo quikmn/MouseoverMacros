@@ -47,6 +47,10 @@ ns.MACROS = {
         { "dspirit", "Divine Spirit", "help" },
         { "fward",   "Fear Ward", "help" },
         { "sprot",   "Shadow Protection", "help" },
+        -- group buffs: cast on a friend, they buff that friend's whole party (never you by default)
+        { "pfort",   "Prayer of Fortitude", "help" },
+        { "pspirit", "Prayer of Spirit", "help" },
+        { "psprot",  "Prayer of Shadow Protection", "help" },
         { "poh",     "Prayer of Healing", "helpOrSelf" },
         { "curedis", "Cure Disease", "help" },
         { "dispel",  "Dispel Magic", "any" },
@@ -54,6 +58,7 @@ ns.MACROS = {
         { "swp",     "Shadow Word: Pain", "harm" },
         { "smite",   "Smite", "harm" },
         { "mblast",  "Mind Blast", "harm" },
+        { "swd",     "Shadow Word: Death", "harm" },
         { "dplague", "Devouring Plague", "harm" },
         { "shackle", "Shackle Undead", "harm" },
         { "rez",     "Resurrection", "res" },
