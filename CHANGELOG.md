@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- A macro window: Mine, Account, Character, Extended, Templates, Edit, Backups and Options in the sidebar. Search, slot counters, and an editor for any macro (yours too: /mom only limits what it changes on its own) with an icon picker, a live character count, a check that spell and item names exist, quick inserts for conditionals, Save as copy, Move to account / character (when there is room), Delete (click twice) and Pick up.
+- Extended macros: as many as you like, up to 1023 characters, no macro slot. Run one with a key binding (per character), or put it on a bar through a one-line _mom macro (one slot).
+- Backups: every save keeps the last 10 versions of a macro; deleted macros go to a bin (last 20) and can be restored. Export a set of macros as text and import it again (on any character, as extended, character or account macros; nothing is replaced).
+- Templates: besides the mouseover set, both trinkets, focus / skull on mouseover, target and attack, assist focus, ready check, and for priests a wand and Inner Focus + Greater Heal macro.
 - /mom no longer overwrites a macro just because it has the same name. Its macros are now called `_mom` plus four random digits (`_mom4821`, never one that already exists), and it remembers which ones it made (account macros for the account, character macros per character). Only those are ever updated; every other macro is left alone. If one of yours is called `heal`, /mom says so and makes its own under a `_mom` name.
 - Your old /mom macros (`heal`, `fort`, ...) are renamed to `_mom` names at login, in place, so they stay on your action bars. Only macros whose text is exactly what an older /mom wrote are renamed; a macro you changed keeps its name and is yours.
 - The window shows each macro's name and state: ours and up to date, ours but changed by hand (Update puts ours back), missing (you deleted it; Create makes a new one), or not created. A macro of ours you renamed is still recognised.
