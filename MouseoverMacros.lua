@@ -268,9 +268,10 @@ app:Section("macros", "Macros", function(stack)
         toggle = { get = function(e) return e.on end, set = function(e, on) db.off[e.name] = (not on) or nil end },
         icon = function(e) return SpellIcon(e.spell) end,
         title = function(e) return e.name .. "  |cff8d94a3" .. e.spell .. "|r" end,
-        detail = function(e) return e.desc .. "  -  " .. STATUS[e.status] .. (e.index and (e.account and " (account)" or " (character)") or "") end,
+        -- the status first: the row is too narrow for both in full, and the tooltip has the rest
+        detail = function(e) return STATUS[e.status] .. (e.index and (e.account and " (account)" or " (character)") or "") .. "  |cff8d94a3-  " .. e.desc .. "|r" end,
         tooltip = function(e)
-            return { e.name .. " - " .. e.spell, e.desc, " ", (e.body:gsub("|", "||")) }
+            return { e.name .. " - " .. e.spell, e.desc, STATUS[e.status] .. (e.index and (e.account and " (account macro)" or " (character macro)") or ""), " ", (e.body:gsub("|", "||")) }
         end,
         buttons = {
             { label = function(e) return e.status == "missing" and "Create" or e.status == "differs" and "Update" or "Up to date" end,
