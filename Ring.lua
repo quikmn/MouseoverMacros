@@ -15,6 +15,12 @@
 -- The picture is insecure: one plain frame per ring follows its secure frame's OnShow/OnHide, fades in
 -- and out in 0.08 s and, only while shown, highlights the slice the cursor points at (OnUpdate).
 local _, ns = ...
+
+-- Events differ between clients (LEARNED_SPELL_IN_TAB is gone on Forever): register only ones that exist.
+function ns.SafeRegister(frame, event)
+    if C_EventUtils and C_EventUtils.IsEventValid and not C_EventUtils.IsEventValid(event) then return false end
+    return pcall(frame.RegisterEvent, frame, event)
+end
 local R = ns.Ring
 local UI = LibStub("EverlookUI-1")
 
@@ -331,7 +337,7 @@ function ShowDisplay(r)
     d.target = 1
     if not d:IsShown() then d.alpha = 0; d:SetAlpha(0) end
     d:Show()
-    if not next(shown) then for _, ev in ipairs(LIVE) do events:RegisterEvent(ev) end end
+    if not next(shown) then for _, ev in ipairs(LIVE) do ns.SafeRegister(events, ev) end end
     shown[r] = true
 end
 
@@ -427,7 +433,7 @@ end
 local REBUILD = { "BAG_UPDATE_DELAYED", "SPELLS_CHANGED", "LEARNED_SPELL_IN_TAB", "EQUIPMENT_SETS_CHANGED", "UPDATE_MACROS",
     "PLAYER_LEVEL_UP", "GET_ITEM_INFO_RECEIVED" }
 local ev = CreateFrame("Frame")
-for _, e in ipairs(REBUILD) do ev:RegisterEvent(e) end
+for _, e in ipairs(REBUILD) do ns.SafeRegister(ev, e) end
 ev:SetScript("OnEvent", function(_, event)
     if event == "GET_ITEM_INFO_RECEIVED" and not R.missingInfo then return end
     R.Schedule()
