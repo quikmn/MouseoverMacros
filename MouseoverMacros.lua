@@ -124,8 +124,14 @@ end
 ------------------------------------------------------------------------
 -- The game's macros
 ------------------------------------------------------------------------
-local function MaxAccount() return MAX_ACCOUNT_MACROS or 120 end
-local function MaxChar() return MAX_CHARACTER_MACROS or 18 end
+-- The client's limits: Constants.MacroConsts on this client (120 account, 30 per character); the old
+-- globals only on clients that still have them.
+local function MacroConst(key)
+    local c = Constants and Constants.MacroConsts
+    return c and tonumber(c[key]) or nil
+end
+local function MaxAccount() return MacroConst("MAX_ACCOUNT_MACROS") or MAX_ACCOUNT_MACROS or 120 end
+local function MaxChar() return MacroConst("MAX_CHARACTER_MACROS") or MAX_CHARACTER_MACROS or 18 end
 local function ScopeOf(index) return index <= MaxAccount() and "account" or "char" end
 ns.MaxAccount, ns.MaxChar, ns.ScopeOf = MaxAccount, MaxChar, ScopeOf
 

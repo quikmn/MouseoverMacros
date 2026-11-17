@@ -545,6 +545,14 @@ step("help, list, settings and unknown commands", function()
 	check(last():find("/mom help", 1, true), "unknown reply")
 end)
 
+step("slot limits come from Constants.MacroConsts (30 character macros on this client)", function()
+	Constants = { MacroConsts = { MAX_ACCOUNT_MACROS = 120, MAX_CHARACTER_MACROS = 30 } }
+	check(ns.MaxChar() == 30 and ns.MaxAccount() == 120, "limits: " .. ns.MaxChar() .. "/" .. ns.MaxAccount())
+	check(ns.CountsLine():find("/30", 1, true), "counts line: " .. ns.CountsLine())
+	Constants = nil
+	check(ns.MaxChar() == 18, "falls back to the global")
+end)
+
 step("the player's macros were never changed", function()
 	check(find("fort").body == PLAYER_FORT and find("Mount2").body == "/cast Riding Turtle", "changed") -- Mount2: renamed by the player in the editor
 	check(find("smite").body == "#showtooltip Smite\n/cast Smite", "smite changed")
