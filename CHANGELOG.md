@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The ring: hold the middle mouse button (or any key you pick), flick the mouse toward a slice and let go. Right: Consumables (the best food, drink, healing and mana potion and bandage in your bags, picked by required level and item level, plus your buffs). Left: Professions. Down: Fishing (Fishing, your "Fishing" equipment set or best pole, lures on the pole). Up: Hearthstone. A sub-ring opens its own ring: click a slice or press the key again toward it; Escape, a right click or letting go in the middle closes it. Works in combat (secure buttons; its contents update after combat, used-up items show greyed). Edit it on the new Ring page (drag spells, items, macros, mounts or equipment sets onto a direction, sub-rings, dynamic slices like "Best food") or with /mom ring. "Ring on" off gives the key back.
 - /macro opens /mom instead of Blizzard's macro window, on your account macros (character macros when you have no account ones). So does Macros in the game menu and in the chat menu (outside combat; in combat those open Blizzard's window as before). Blizzard's window is still one click away: "Blizzard's macro window" at the bottom of the sidebar, or /mom blizzard; inside it, "Open /mom" comes back. Switch it off with "Open MoM for /macro" under Options (/mom takeover off).
 - Mine, when empty, says your own macros are under Account and Character.
 - Editor: changes you haven't saved are never dropped silently. Picking another macro, New, another page, or closing the window (x, Escape, /mom) asks: Save, Discard or Cancel.
