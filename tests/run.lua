@@ -352,7 +352,7 @@ step("extended macros: no slot, a secure button, 1023 characters, key binding, b
 	check(a0 == a1 and c0 == c1, "an extended macro took a slot")
 	local b = _G.MoMX_1
 	check(b and b:GetAttribute("type") == "macro" and b:GetAttribute("macrotext") == long, "secure button")
-	check(b:GetAttribute("useOnKeyDown") == false, "acts once, on release")
+	check(b:GetAttribute("useOnKeyDown") == true and #b.__clicks == 1 and b.__clicks[1] == "AnyDown", "acts once, on the press")
 	check(not ns.CreateExt("Too long", nil, ("x"):rep(1024)), "1024 accepted")
 	check(not ns.CreateExt("", nil, "/say hi"), "empty name accepted")
 	ok = ns.SaveExt(ns.ExtRef(1), "Big renew", 135953, "#showtooltip Renew\n/cast [@mouseover,help,nodead][help,nodead] Renew")
@@ -363,7 +363,7 @@ step("extended macros: no slot, a secure button, 1023 characters, key binding, b
 	local ok2, msg2, index = ns.ExtToBar(ns.ExtRef(1))
 	check(ok2 and index, "bar macro: " .. tostring(msg2))
 	local bar = ns.GameRef(index)
-	check(isMom(bar.name) and bar.body:find("/click MoMX_1", 1, true) and bar.body:find("^#showtooltip Renew"), "bar macro body: " .. bar.body)
+	check(isMom(bar.name) and bar.body:find("\n/click MoMX_1 LeftButton 1\n#mom x1$") and bar.body:find("^#showtooltip Renew"), "bar macro body: " .. bar.body)
 	check(ns.Cost(ns.ExtRef(1)):find(bar.name, 1, true), "cost names the bar macro")
 	ns.SaveExt(ns.ExtRef(1), "Big renew", 135953, "#showtooltip Heal\n/cast Heal")
 	check(ns.Fresh(bar).body:find("^#showtooltip Heal"), "bar macro follows the tooltip line")
@@ -621,6 +621,26 @@ step("restore from the bin in combat: waits, then restores and leaves the bin", 
 	for _, r in ipairs(ns.List("ext")) do if r.name == "BinMe" then found = true end end
 	check(found, "not restored after combat")
 	ns.app:Close()
+end)
+
+step("bar macros from an older version get the press line at login (out of combat only)", function()
+	local _, _, id = ns.CreateExt("OldBar", nil, "#showtooltip Heal\n/cast Heal")
+	local _, _, index = ns.ExtToBar(ns.ExtRef(id))
+	local old = "#showtooltip Heal\n/click MoMX_" .. id .. "\n#mom x" .. id
+	EditMacro(index, nil, nil, old)
+	MOCK.combat = true
+	MOCK.Fire("PLAYER_ENTERING_WORLD")
+	check(ns.Fresh(ns.GameRef(index)).body == old, "changed in combat")
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	local bar = ns.ExtBarMacro(id)
+	check(GetMacroInfo(bar.index) == bar.name and select(3, GetMacroInfo(bar.index)) == "#showtooltip Heal\n/click MoMX_" .. id .. " LeftButton 1\n#mom x" .. id,
+		"not updated: " .. select(3, GetMacroInfo(bar.index)))
+	-- up to date: not edited again
+	local before = edits
+	MOCK.Fire("PLAYER_ENTERING_WORLD")
+	check(edits == before, "an up-to-date bar macro was edited again")
+	ns.DeleteExt(ns.ExtRef(id))
 end)
 
 step("the player's macros were never changed", function()

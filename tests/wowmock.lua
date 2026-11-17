@@ -143,6 +143,7 @@ function impl:SetAttribute(k, v)
 	if s then s(self, k, v) end
 end
 function impl:GetAttribute(k) return self.__attrs[k] end
+function impl:RegisterForClicks(...) self.__clicks = { ... } end
 function impl:RegisterEvent(e) self.__events[e] = true end
 function impl:RegisterUnitEvent(e) self.__events[e] = true end
 function impl:UnregisterEvent(e) self.__events[e] = nil end

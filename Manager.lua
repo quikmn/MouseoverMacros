@@ -265,10 +265,11 @@ local function Button(id)
     if not b then
         b = CreateFrame("Button", name, UIParent, "SecureActionButtonTemplate")
         b:Hide()
-        -- down and up both reach the button; with useOnKeyDown false it acts once, on release,
-        -- for a key binding and for "/click MoMX_n" alike
-        b:RegisterForClicks("AnyUp", "AnyDown")
-        b:SetAttribute("useOnKeyDown", false)
+        -- Acts once, on the press: only presses reach the button (a key's release doesn't), and
+        -- useOnKeyDown true makes SecureActionButton_OnClick act on a press whatever the game's
+        -- ActionButtonUseKeyDown setting is. The bar macro clicks it with "LeftButton 1" (a press).
+        b:RegisterForClicks("AnyDown")
+        b:SetAttribute("useOnKeyDown", true)
         b:SetAttribute("type", "macro")
     end
     return b
@@ -290,7 +291,16 @@ function ns.SyncExt()
         ns.Defer("setting up extended macros", ns.SyncExt)
         return
     end
-    for id, x in pairs(DB().ext) do Button(id):SetAttribute("macrotext", x.body) end
+    for id, x in pairs(DB().ext) do
+        Button(id):SetAttribute("macrotext", x.body)
+        -- a bar macro of ours from an older version ("/click MoMX_n", on release) gets the press line
+        local bar = ns.ExtBarMacro(id)
+        if bar then
+            local _, _, body = GetMacroInfo(bar.index)
+            local want = ns.BarBody(id, x.body)
+            if body ~= want then EditMacro(bar.index, bar.name, nil, want) end
+        end
+    end
     ApplyBindings()
 end
 
@@ -299,10 +309,12 @@ function ns.ExtBarMacro(id)
     if i then return { index = i, name = name, scope = ns.ScopeOf(i) } end
 end
 
+-- "LeftButton 1": the click is a press (down), which is when the button acts.
 local function BarBody(id, body)
     local tip = tostring(body or ""):match("^(#showtooltip[^\n]*)")
-    return (tip and tip .. "\n" or "") .. "/click MoMX_" .. id .. "\n#mom x" .. id
+    return (tip and tip .. "\n" or "") .. "/click MoMX_" .. id .. " LeftButton 1\n#mom x" .. id
 end
+ns.BarBody = BarBody
 
 function ns.CreateExt(name, icon, body)
     local err = CheckText(name, body, MAX_EXT)
