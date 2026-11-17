@@ -90,6 +90,7 @@ ns.DEFAULTS = {
     autoSelfCastOff = true, -- keep the game's Auto Self Cast setting off
     where = "character",    -- new macros: "character" (account when full) or "account"
     owned = {},             -- [macro key] = { name, scope = "account", created }: our account macros
+    takeover = true,        -- /macro (and the game menu's Macros) open this window instead of Blizzard's
 }
 ns.CHAR_DEFAULTS = {
     owned = {},             -- [macro key] = { name, scope = "char", created }: this character's macros of ours
@@ -352,6 +353,10 @@ local app = UI:NewApp({
     accent = { 0.25, 0.75, 1.0 },
     width = 860, height = 640,
     position = function() return db end,
+    buttons = {
+        { label = "Blizzard's macro window", onClick = function() ns.OpenBlizzard() end,
+            desc = "Opens the game's own macro window, also while /macro opens this one." },
+    },
 })
 ns.app = app
 
@@ -460,6 +465,12 @@ app:Setting({
     key = "autoselfcast", type = "bool", label = "Keep the game's Auto Self Cast off",
     desc = "With Auto Self Cast on, plain spell buttons fall back to you when you have no friendly target. This turns it off on every login. Switching this off leaves the game's setting as it is.",
     get = function() return db.autoSelfCastOff end, set = function(v) db.autoSelfCastOff = v end, after = ApplySelfCast,
+})
+app:Setting({
+    key = "takeover", type = "bool", label = "Open MoM for /macro", chatLabel = "Open MoM for /macro",
+    desc = "/macro, and Macros in the game menu and the chat menu, open this window instead of Blizzard's. "
+        .. "Blizzard's own window stays one click away: the button at the bottom left, or /mom blizzard.",
+    get = function() return db.takeover end, set = function(v) db.takeover = v end,
 })
 app:Setting({
     key = "where", type = "choice", label = "Where new macros go", width = 300,

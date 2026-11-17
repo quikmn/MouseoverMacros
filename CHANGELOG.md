@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- /macro opens /mom instead of Blizzard's macro window, on your account macros (character macros when you have no account ones). So does Macros in the game menu and in the chat menu (outside combat; in combat those open Blizzard's window as before). Blizzard's window is still one click away: "Blizzard's macro window" at the bottom of the sidebar, or /mom blizzard; inside it, "Open /mom" comes back. Switch it off with "Open MoM for /macro" under Options (/mom takeover off).
+- Mine, when empty, says your own macros are under Account and Character.
 - Editor: changes you haven't saved are never dropped silently. Picking another macro, New, another page, or closing the window (x, Escape, /mom) asks: Save, Discard or Cancel.
 - Saving in combat: Save and Save as copy grey out and the editor says "Will save when combat ends". You can keep typing: the latest text is what gets saved, once (pressing Save again no longer makes a second macro). Afterwards the editor shows the saved macro and says "Saved after combat"; if it fails, it says why in red and your text stays.
 - Set key: clicking it again while it waits cancels (it no longer asks again in chat), and the button reads "Press a key..." while it waits. Shift, Ctrl, Alt and the Windows key on their own are no longer taken as the key.

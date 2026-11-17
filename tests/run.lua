@@ -88,6 +88,21 @@ macros.account = {
 	{ name = "_mom1234", icon = 4, body = "/say a player's macro that happens to look like ours" },
 }
 
+-- Blizzard's macro window as on this client: /macro (an ordinary slash command) and the game menu
+-- call ShowMacroFrame(), which loads Blizzard_MacroUI on demand and shows MacroFrame.
+SLASH_MACRO1 = "/macro"
+MOCK.blizzSlash = 0
+ShowMacroFrame = function()
+	if not MacroFrame then
+		CreateFrame("Frame", "MacroFrame", UIParent)
+		MacroFrame:Hide()
+		MOCK.Fire("ADDON_LOADED", "Blizzard_MacroUI")
+	end
+	MacroFrame:Show()
+end
+HideUIPanel = function(f) f:Hide() end
+SlashCmdList.MACRO = function() MOCK.blizzSlash = MOCK.blizzSlash + 1; ShowMacroFrame() end
+
 local globalWrites = {}
 local addonEnv = setmetatable({}, { __index = _G, __newindex = function(_, k, v) globalWrites[k] = true; _G[k] = v end })
 
@@ -804,6 +819,66 @@ step("bar macros from an older version get the press line at login (out of comba
 	MOCK.Fire("PLAYER_ENTERING_WORLD")
 	check(edits == before, "an up-to-date bar macro was edited again")
 	ns.DeleteExt(ns.ExtRef(id))
+end)
+
+step("/macro and the game menu open /mom (on the game macros); Blizzard's window one click away", function()
+	check(MouseoverMacrosDB.takeover == true, "takeover is not on by default")
+	if ns.app:IsShown() then ns.app:Close() end
+	SlashCmdList.MACRO("")
+	check(ns.app:IsShown() and ns.app.current == "account" and MOCK.blizzSlash == 0 and not MacroFrame, "/macro: " .. tostring(ns.app.current))
+	ns.app:Close()
+	-- the game menu's / chat menu's Macros: Blizzard's window is closed again and ours opens
+	ShowMacroFrame()
+	check(MacroFrame and not MacroFrame:IsShown() and ns.app:IsShown() and ns.app.current == "account", "game menu")
+	check(ns.macroButton and ns.macroButton:GetParent() == MacroFrame, "no button in Blizzard's window")
+	-- /mom blizzard: Blizzard's window, ours closed; the game menu doesn't take it away while it's open
+	SlashCmdList.MOUSEOVERMACROS("blizzard")
+	check(MacroFrame:IsShown() and not ns.app:IsShown(), "/mom blizzard")
+	ShowMacroFrame()
+	check(MacroFrame:IsShown() and not ns.app:IsShown(), "Blizzard's window taken away while open on purpose")
+	-- its "Open /mom" button
+	ns.macroButton:GetScript("OnClick")(ns.macroButton)
+	check(not MacroFrame:IsShown() and ns.app:IsShown(), "Open /mom button")
+	-- once closed, the takeover is back
+	ShowMacroFrame()
+	check(not MacroFrame:IsShown() and ns.app:IsShown(), "takeover not back")
+	-- the sidebar button
+	local footer = ns.app.window.footer[1]
+	check(footer and footer:GetText() == "Blizzard's macro window", "sidebar button")
+	footer:GetScript("OnClick")(footer)
+	check(MacroFrame:IsShown() and not ns.app:IsShown(), "sidebar button did not open Blizzard's window")
+	MacroFrame:Hide()
+	-- in combat the game menu leaves Blizzard's window alone (closing it would save its text from an addon)
+	MOCK.combat = true
+	ShowMacroFrame()
+	check(MacroFrame:IsShown(), "closed Blizzard's window in combat")
+	MacroFrame:Hide()
+	SlashCmdList.MACRO("")
+	check(ns.app:IsShown() and not MacroFrame:IsShown(), "/macro in combat")
+	ns.app:Close()
+	MOCK.combat = false
+	-- unsaved changes: /macro opens the editor, not a list
+	ns.EditNew("ext")
+	ns.ed.body = "/say unsaved"
+	ns.app.window:Hide() -- hidden by something else (no question)
+	SlashCmdList.MACRO("")
+	check(ns.app.current == "edit" and ns.ed.body == "/say unsaved", "/macro left unsaved changes")
+	ns.app:Close()
+	answer("discard")
+	-- switched off: /macro and the game menu are Blizzard's again
+	SlashCmdList.MOUSEOVERMACROS("takeover off")
+	check(MouseoverMacrosDB.takeover == false, "setting")
+	SlashCmdList.MACRO("")
+	check(MOCK.blizzSlash == 1 and MacroFrame:IsShown() and not ns.app:IsShown(), "/macro with the takeover off")
+	MacroFrame:Hide()
+	ShowMacroFrame()
+	check(MacroFrame:IsShown() and not ns.app:IsShown(), "game menu with the takeover off")
+	MacroFrame:Hide()
+	SlashCmdList.MOUSEOVERMACROS("takeover on")
+	-- an empty Mine says where the player's own macros are
+	ns.app:Open("mine")
+	check(ns.EMPTY_MINE and ns.EMPTY_MINE:find("under Account and Character", 1, true), "Mine's empty text")
+	ns.app:Close()
 end)
 
 step("the player's macros were never changed", function()

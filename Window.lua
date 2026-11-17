@@ -309,11 +309,14 @@ end
 ns.PickUp = PickUp
 
 local EMPTY = {
-    mine = "Nothing made by /mom yet. Templates makes your class's mouseover set; \"New extended macro\" makes one past the slot limits.",
+    mine = "Nothing made by /mom yet. Your own macros are under Account and Character in the sidebar. "
+        .. "Templates makes your class's mouseover set; \"New extended macro\" makes one past the slot limits.",
     account = "No account macros yet. \"New account macro\" makes one.",
     char = "No macros on this character yet. \"New character macro\" makes one.",
     ext = "No extended macros yet. \"New extended macro\" makes one; they need no slot.",
 }
+
+ns.EMPTY_MINE = EMPTY.mine
 
 local function MacroList(stack, which)
     UI.Input(stack, {
@@ -772,6 +775,7 @@ end)
 
 app:Section("options", "Options", function(stack)
     UI.Header(stack, "Options")
+    app:Widget(stack, "takeover")
     app:Widget(stack, "where")
     app:Widget(stack, "autoselfcast")
     UI.Note(stack, "Slots: the game allows " .. ns.MaxAccount() .. " account macros and " .. ns.MaxChar() .. " per character, 255 characters each; no addon can raise that. Extended macros live in /mom instead and need no slot.")
@@ -791,3 +795,97 @@ app:Command("new", "new [ext|account|char]", "open the editor on a new macro", f
     as = as == "ext" and "ext" or as == "account" and "account" or "char"
     ns.EditNew(as)
 end)
+
+app:Command("blizzard", "blizzard", "open Blizzard's own macro window (also while /macro opens this one)", function() ns.OpenBlizzard() end)
+
+------------------------------------------------------------------------
+-- /macro and Blizzard's macro window
+------------------------------------------------------------------------
+-- /macro is an ordinary slash command (SlashCmdList.MACRO; the secure ones live in a separate list
+-- addons can't reach), so replacing that entry is safe. The game menu's and the chat menu's "Macros"
+-- call ShowMacroFrame(): a hooksecurefunc hook (Blizzard's function itself is never replaced) closes
+-- Blizzard's window again right away and opens ours. Not in combat: closing Blizzard's window saves
+-- its text, which the game refuses from an addon in combat, so there it stays open as it was.
+local allowBlizzard -- Blizzard's window was opened on purpose (/mom blizzard, our buttons): leave it
+local blizzSlash
+
+local function Takeover() return not ns.db or ns.db.takeover ~= false end
+
+-- The page /macro opens: the game macros (account first, as in Blizzard's window), or the editor
+-- when it holds unsaved changes.
+function ns.OpenForMacro()
+    if Dirty() then app:Open("edit") return end
+    local a, c = GetNumMacros()
+    app:Open(((a or 0) == 0 and (c or 0) > 0) and "char" or "account")
+end
+
+local function ShowBlizzard()
+    allowBlizzard = true
+    if ShowMacroFrame then
+        ShowMacroFrame()
+    elseif C_AddOns and C_AddOns.LoadAddOn and C_AddOns.LoadAddOn("Blizzard_MacroUI") and MacroFrame_Show then
+        MacroFrame_Show()
+    end
+    if not (MacroFrame and MacroFrame:IsShown()) then allowBlizzard = nil end
+end
+
+-- Blizzard's own macro window, whatever the setting. Ours closes (asking first about unsaved changes).
+function ns.OpenBlizzard()
+    if app:IsShown() then
+        if Dirty() then return ns.Guard(function() baseClose(app); ShowBlizzard() end) end
+        baseClose(app)
+    end
+    ShowBlizzard()
+end
+
+if SlashCmdList then
+    blizzSlash = SlashCmdList.MACRO
+    local function slash(msg)
+        if Takeover() or not blizzSlash then ns.OpenForMacro() else blizzSlash(msg) end
+    end
+    SlashCmdList.MACRO = slash
+    -- the chat box caches a command's function on first use: point a cached /macro at ours too
+    if type(hash_SlashCmdList) == "table" then
+        for i = 1, 9 do
+            local cmd = _G["SLASH_MACRO" .. i]
+            if type(cmd) == "string" and hash_SlashCmdList[cmd:upper()] then hash_SlashCmdList[cmd:upper()] = slash end
+        end
+    end
+end
+
+if type(ShowMacroFrame) == "function" then
+    hooksecurefunc("ShowMacroFrame", function()
+        if allowBlizzard or not Takeover() or InCombatLockdown() then return end
+        if MacroFrame and MacroFrame:IsShown() then HideUIPanel(MacroFrame) end
+        ns.OpenForMacro()
+    end)
+end
+
+-- A button in Blizzard's macro window that opens ours (Blizzard_MacroUI loads when first opened).
+local macroButton
+local function OnMacroUI()
+    if macroButton or not MacroFrame then return end
+    macroButton = CreateFrame("Button", nil, MacroFrame, "UIPanelButtonTemplate")
+    macroButton:SetSize(84, 22)
+    macroButton:SetPoint("BOTTOMLEFT", MacroFrame, "BOTTOMLEFT", 88, 4) -- between Delete and New
+    macroButton:SetText("Open /mom")
+    macroButton:SetScript("OnClick", function()
+        -- closing Blizzard's window saves its text: not from here in combat (ours opens on top)
+        if not InCombatLockdown() then HideUIPanel(MacroFrame) end
+        ns.OpenForMacro()
+    end)
+    macroButton:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:AddLine("Mouseover Macros", 1, 1, 1)
+        GameTooltip:AddLine("Opens /mom: extended macros past the slot limits, backups, templates and the editor.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    macroButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    MacroFrame:HookScript("OnHide", function() allowBlizzard = nil end)
+    ns.macroButton = macroButton
+end
+
+local loader = CreateFrame("Frame")
+loader:RegisterEvent("ADDON_LOADED")
+loader:SetScript("OnEvent", function(_, _, name) if name == "Blizzard_MacroUI" then OnMacroUI() end end)
+OnMacroUI()

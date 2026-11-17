@@ -2,6 +2,8 @@
 
 WoW Forever (interface 16001). `/mom` opens a macro window: your class's mouseover set, every macro you have, extended macros past the slot limits, backups and export / import. `/mom help` lists the chat commands.
 
+`/macro` opens this window too (on your account macros), and so does Macros in the game menu and the chat menu (outside combat). Blizzard's own macro window: "Blizzard's macro window" at the bottom of the sidebar or `/mom blizzard`; it has an "Open /mom" button to come back. To give `/macro` back to Blizzard, switch off "Open MoM for /macro" under Options (`/mom takeover off`).
+
 ## The window
 
 - **Mine**: what /mom made for you (`_mom` macros) and your extended macros.
@@ -10,7 +12,7 @@ WoW Forever (interface 16001). `/mom` opens a macro window: your class's mouseov
 - **Templates**: the mouseover set for your class (on/off switches, Create / update all) and a few common macros (both trinkets, focus or skull on mouseover, target and attack, assist focus, ready check; Priest: wand and Inner Focus + Greater Heal), made as a `_mom` macro or as an extended one.
 - **Edit**: name, icon (picker with search; "Icon from the spell" shows the icon of the spell the macro casts), the text with a live count against its limit (255 or 1023), a check that every spell and item name exists, quick inserts for conditionals, Save, Save as copy, Pick up, Move to account / character, Delete (click twice). Leaving a macro with unsaved changes asks Save / Discard / Cancel. Save in combat waits and saves your latest text when combat ends. The last 10 versions of each macro are kept; Restore puts one back in the editor.
 - **Backups**: the last 20 deleted macros (Restore), export of a set as text, import (as exported, or as extended, character or account macros; nothing is replaced).
-- **Options**: where new macros go, keeping the game's Auto Self Cast off.
+- **Options**: Open MoM for /macro, where new macros go, keeping the game's Auto Self Cast off.
 
 The game allows 120 account macros and a fixed number per character, 255 characters each. No addon can change that; extended macros are the way past it.
 
