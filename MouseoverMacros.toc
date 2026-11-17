@@ -4,6 +4,7 @@
 ## Author: quikmn
 ## Version: 0.1.0
 ## SavedVariables: MouseoverMacrosDB
+## SavedVariablesPerCharacter: MouseoverMacrosCharDB
 ## IconTexture: Interface\Icons\Spell_Holy_Renew
 
 Libs\LibStub\LibStub.lua

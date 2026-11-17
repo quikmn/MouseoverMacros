@@ -1,5 +1,6 @@
--- Offline tests for MouseoverMacros against wowmock.lua: macro bodies, creating and updating,
--- the on/off switches, where new macros go, Auto Self Cast, every slash command and the window.
+-- Offline tests for MouseoverMacros against wowmock.lua: macro bodies, _mom names and ownership,
+-- migration of old plain-named macros, the on/off switches, where new macros go, the combat queue,
+-- Auto Self Cast, every slash command and the window.
 local ROOT = ...
 local ADDON = "MouseoverMacros"
 local ns = {}
@@ -17,9 +18,11 @@ local function step(name, fn)
 end
 local function check(cond, msg) if not cond then error(msg, 2) end end
 local function last() return MOCK.log[#MOCK.log] or "" end
+local function logHas(s) for _, l in ipairs(MOCK.log) do if l:find(s, 1, true) then return true end end return false end
 
 -- Macro API: account macros are indexes 1-120, character macros 121-138.
 local macros = { account = {}, char = {} }
+MOCK.macros = macros
 MAX_ACCOUNT_MACROS, MAX_CHARACTER_MACROS = 120, 18
 local function all()
 	local t = {}
@@ -27,16 +30,27 @@ local function all()
 	for i, m in ipairs(macros.char) do t[120 + i] = m end
 	return t
 end
+local edits = 0
 GetNumMacros = function() return #macros.account, #macros.char end
 GetMacroIndexByName = function(name) for i, m in pairs(all()) do if m.name == name then return i end end return 0 end
 GetMacroInfo = function(i) local m = all()[i]; if m then return m.name, m.icon, m.body end end
 CreateMacro = function(name, icon, body, perChar)
+	if MOCK.combat then error("ADDON_ACTION_BLOCKED: CreateMacro in combat", 2) end
+	check(#body <= 255, "body over 255: " .. name)
 	local list = perChar and macros.char or macros.account
 	if #list >= (perChar and 18 or 120) then return nil end
 	list[#list + 1] = { name = name, icon = icon, body = body }
 	return true
 end
-EditMacro = function(i, name, icon, body) local m = all()[i]; m.name = name or m.name; m.body = body end
+EditMacro = function(i, name, icon, body)
+	if MOCK.combat then error("ADDON_ACTION_BLOCKED: EditMacro in combat", 2) end
+	local m = all()[i]; m.name = name or m.name; m.body = body or m.body; m.icon = icon or m.icon
+	edits = edits + 1
+	return i
+end
+DeleteMacro = function(i)
+	if i > 120 then table.remove(macros.char, i - 120) else table.remove(macros.account, i) end
+end
 MOCK.picked = nil
 PickupMacro = function(i) MOCK.picked = i end
 MOCK.cvars = { autoSelfCast = "1" }
@@ -44,12 +58,35 @@ C_CVar = { GetCVar = function(k) return MOCK.cvars[k] end, SetCVar = function(k,
 UnitClass = function() return "Priest", "PRIEST", 5 end
 C_Spell = C_Spell or {}
 C_Spell.GetSpellTexture = function() return 135953 end
+time = time or function() return 1700000000 end
+
+local function find(name) for _, m in pairs(all()) do if m.name == name then return m end end end
+local function isMom(n) return n and n:match("^_mom%d%d%d%d$") ~= nil end
+local function entry(key) return ns.Find(key) end
+
+-- The owner's macros before this version: old /mom macros under plain names, plus his own ones.
+local OLD_HEAL = "#showtooltip Heal\n/cast [@mouseover,help,nodead][help,nodead] Heal"
+local OLD_DISPEL_V1 = "#showtooltip Dispel Magic\n/cast [@mouseover,help,nodead][help,nodead] Dispel Magic"
+local OLD_RENEW = "#showtooltip Renew\n/cast [@mouseover,help,nodead][help,nodead] Renew"
+local PLAYER_FORT = "#showtooltip\n/cast [@focus] Power Word: Fortitude"
+macros.char = {
+	{ name = "heal", icon = 134400, body = OLD_HEAL },
+	{ name = "fort", icon = 1, body = PLAYER_FORT },              -- the player's own: never touched
+	{ name = "renew", icon = 134400, body = OLD_RENEW .. "\n" },  -- trailing newline only: still ours
+	{ name = "Mount", icon = 2, body = "/cast Riding Turtle" },
+}
+macros.account = {
+	{ name = "dispel", icon = 134400, body = OLD_DISPEL_V1 },     -- the first version's Dispel
+	{ name = "smite", icon = 3, body = "#showtooltip Smite\n/cast Smite" }, -- same name, other text: the player's
+	{ name = "_mom1234", icon = 4, body = "/say a player's macro that happens to look like ours" },
+}
 
 local globalWrites = {}
 local addonEnv = setmetatable({}, { __index = _G, __newindex = function(_, k, v) globalWrites[k] = true; _G[k] = v end })
 
 step("load TOC files; defaults on a fresh install", function()
 	local toc = assert(io.open(ROOT .. "/" .. ADDON .. ".toc")):read("*a")
+	check(toc:find("## SavedVariablesPerCharacter: MouseoverMacrosCharDB", 1, true), "per-character saved variables")
 	for line in toc:gmatch("[^\r\n]+") do
 		if not line:match("^%s*#") and line:match("%.lua%s*$") then
 			local chunk, err = loadfile(ROOT .. "/" .. line:gsub("\\", "/"):gsub("%s+$", ""))
@@ -61,27 +98,72 @@ step("load TOC files; defaults on a fresh install", function()
 	MOCK.Fire("ADDON_LOADED", ADDON)
 	local db = MouseoverMacrosDB
 	check(db and db.autoSelfCastOff == true and db.where == "character" and next(db.off) == nil, "defaults")
+	check(next(db.owned) == nil and next(MouseoverMacrosCharDB.owned) == nil, "no ownership yet")
 end)
 
-step("macro bodies are exactly the old ones", function()
+step("macro bodies: the old text plus a #mom marker line, all within 255", function()
 	local want = {
-		renew = "#showtooltip Renew\n/cast [@mouseover,help,nodead][help,nodead] Renew",
-		poh = "#showtooltip Prayer of Healing\n/cast [@mouseover,help,nodead][help,nodead][@player] Prayer of Healing",
-		dispel = "#showtooltip Dispel Magic\n/cast [@mouseover,exists,nodead][exists,nodead] Dispel Magic",
-		swp = "#showtooltip Shadow Word: Pain\n/cast [@mouseover,harm,nodead][harm,nodead] Shadow Word: Pain",
-		rez = "#showtooltip Resurrection\n/cast [@mouseover,help,dead][help,dead] Resurrection",
+		renew = "#showtooltip Renew\n/cast [@mouseover,help,nodead][help,nodead] Renew\n#mom renew",
+		poh = "#showtooltip Prayer of Healing\n/cast [@mouseover,help,nodead][help,nodead][@player] Prayer of Healing\n#mom poh",
+		dispel = "#showtooltip Dispel Magic\n/cast [@mouseover,exists,nodead][exists,nodead] Dispel Magic\n#mom dispel",
+		swp = "#showtooltip Shadow Word: Pain\n/cast [@mouseover,harm,nodead][harm,nodead] Shadow Word: Pain\n#mom swp",
+		rez = "#showtooltip Resurrection\n/cast [@mouseover,help,dead][help,dead] Resurrection\n#mom rez",
 	}
 	local n = 0
 	for _, e in ipairs(ns.Entries()) do
 		n = n + 1
-		if want[e.name] then check(e.body == want[e.name], e.name .. " body changed:\n" .. e.body) end
-		check(not e.body:find("@player") or e.name == "poh", e.name .. " casts on you")
+		if want[e.key] then check(e.body == want[e.key], e.key .. " body changed:\n" .. e.body) end
+		check(#e.body <= 255, e.key .. " too long")
+		check(not e.body:find("@player") or e.key == "poh", e.key .. " casts on you")
+		-- every current body without the marker is one of the legacy bodies (what older /mom wrote)
+		local plain = e.body:gsub("\n#mom %w+$", "")
+		local found = false
+		for _, b in ipairs(ns.LEGACY.PRIEST[e.key]) do if b == plain then found = true end end
+		check(found, e.key .. " has no legacy body matching the current one")
 	end
 	check(n == 20, "20 priest macros, got " .. n)
+	-- a body with no room for the marker goes without it
+	local long = ns.Body({ "x", ("A"):rep(96), "help" })
+	check(not long:find("#mom", 1, true) and #long <= 255, "marker past 255")
+end)
+
+step("before login nothing is touched; states before migration", function()
+	check(edits == 0, "edited before login")
+	check(entry("heal").status == "legacy" and entry("dispel").status == "legacy", "legacy seen")
+	check(entry("fort").status == "new" and entry("fort").clash, "player's fort is a clash")
+	check(entry("smite").clash and entry("smite").status == "new", "player's smite (other text) is a clash")
+	check(isMom(entry("fort").macro), "planned name: " .. tostring(entry("fort").macro))
+	check(entry("fort").macro == entry("fort").macro, "planned name is stable")
+end)
+
+step("migration at login: identical old macros renamed in place, the player's left alone", function()
+	MOCK.log = {}
+	MOCK.Fire("PLAYER_LOGIN")
+	MOCK.Fire("PLAYER_ENTERING_WORLD")
+	local heal, renew = macros.char[1], macros.char[3]
+	check(isMom(heal.name) and heal.icon == 134400, "heal renamed in place: " .. heal.name)
+	check(heal.body == entry("heal").body, "heal body brought up to date")
+	check(isMom(renew.name), "renew (trailing newline) adopted")
+	check(isMom(macros.account[1].name), "dispel (first version's text) adopted")
+	check(macros.char[2].name == "fort" and macros.char[2].body == PLAYER_FORT, "player's fort touched")
+	check(macros.account[2].name == "smite" and macros.account[2].body == "#showtooltip Smite\n/cast Smite", "player's smite touched")
+	check(macros.account[3].body:find("player's", 1, true), "player's _mom1234 touched")
+	check(macros.char[4].name == "Mount", "unrelated macro touched")
+	local cdb, db = MouseoverMacrosCharDB, MouseoverMacrosDB
+	check(cdb.owned.heal and cdb.owned.heal.name == heal.name and cdb.owned.heal.scope == "char" and cdb.owned.heal.created, "heal record")
+	check(db.owned.dispel and db.owned.dispel.scope == "account" and not cdb.owned.dispel, "dispel record (account)")
+	check(logHas("renamed 3 old /mom macros"), "migration message")
+	check(entry("heal").status == "ok" and entry("dispel").status == "ok", "now ours and up to date")
+	-- all names unique
+	local seen = {}
+	for _, m in pairs(all()) do check(not seen[m.name:lower()], "duplicate " .. m.name); seen[m.name:lower()] = true end
+	-- a second login migrates nothing more
+	local before = edits
+	ns.RunMigration()
+	check(edits == before, "second migration edited")
 end)
 
 step("Auto Self Cast is turned off at login (option on by default)", function()
-	MOCK.Fire("PLAYER_LOGIN")
 	check(MOCK.cvars.autoSelfCast == "0", "not turned off")
 	MOCK.cvars.autoSelfCast = "1"
 	SlashCmdList.MOUSEOVERMACROS("autoselfcast off")
@@ -92,79 +174,155 @@ step("Auto Self Cast is turned off at login (option on by default)", function()
 	check(MOCK.cvars.autoSelfCast == "0", "switching it on didn't apply it")
 end)
 
-step("bare /mom opens the window (no longer creates macros); Escape closes it", function()
+step("bare /mom opens the window (no macros made); Escape closes it", function()
+	local before = edits + #macros.char + #macros.account
 	SlashCmdList.MOUSEOVERMACROS("")
 	local f = MouseoverMacrosOptionsWindow
 	check(f and f:IsShown(), "window not shown")
-	check(#macros.char == 0 and #macros.account == 0, "bare /mom created macros")
+	check(edits + #macros.char + #macros.account == before, "bare /mom changed macros")
 	f:GetScript("OnKeyDown")(f, "ESCAPE")
 	check(not f:IsShown(), "escape didn't close")
 end)
 
-step("switches: off macros are skipped by install; on/off from chat and the window", function()
-	SlashCmdList.MOUSEOVERMACROS("off renew")
-	check(MouseoverMacrosDB.off.renew, "off")
+step("a clash: ours is made under a _mom name, the player's fort stays", function()
+	local planned = entry("fort").macro
+	SlashCmdList.MOUSEOVERMACROS("create fort")
+	check(find("fort").body == PLAYER_FORT, "player's fort overwritten")
+	local m = find(planned)
+	check(m and m.body == entry("fort").body, "ours not made as " .. planned)
+	check(entry("fort").status == "ok" and not entry("fort").clash, "fort now ours")
+	check(last():find(planned, 1, true), "reply names the macro: " .. last())
+end)
+
+step("install all: switched-off skipped, character first then account, nothing of the player's edited", function()
+	SlashCmdList.MOUSEOVERMACROS("off penance")
+	check(MouseoverMacrosDB.off.penance, "off")
 	SlashCmdList.MOUSEOVERMACROS("off nosuch")
 	check(last():find("no macro called", 1, true) and last():find("renew", 1, true), "unknown macro reply: " .. last())
 	SlashCmdList.MOUSEOVERMACROS("off")
 	check(last():find("Example: /mom off renew", 1, true), "missing name reply: " .. last())
 	SlashCmdList.MOUSEOVERMACROS("install")
-	check(GetMacroIndexByName("renew") == 0, "switched-off macro created")
-	check(#macros.char == 18 and #macros.account == 1, "character first, then account when full: " .. #macros.char .. "/" .. #macros.account)
-	check(last():find("created 19", 1, true) and last():find("1 switched off", 1, true), "summary: " .. last())
-	SlashCmdList.MOUSEOVERMACROS("on renew")
-	check(not MouseoverMacrosDB.off.renew, "on")
+	check(entry("penance").status == "new", "switched-off macro created")
+	check(#macros.char == 18, "character macros filled first: " .. #macros.char)
+	check(last():find("created 15, updated 4", 1, true) and last():find("1 switched off", 1, true), "summary: " .. last())
+	check(find("fort").body == PLAYER_FORT and find("smite").body == "#showtooltip Smite\n/cast Smite"
+		and find("_mom1234").body:find("player's", 1, true) and find("Mount"), "player's macros changed")
+	for _, e in ipairs(ns.Entries()) do
+		if e.on then check(e.status == "ok" and isMom(e.macro), e.key .. " " .. e.status) end
+	end
+	SlashCmdList.MOUSEOVERMACROS("on penance")
 	SlashCmdList.MOUSEOVERMACROS("all")
 	check(last():find("created 1, updated 19", 1, true), "second install: " .. last())
+	check(MouseoverMacrosDB.owned.penance and MouseoverMacrosDB.owned.penance.scope == "account", "account record when character is full")
 end)
 
-step("a macro edited by hand shows as changed and Update puts ours back", function()
-	local i = GetMacroIndexByName("heal")
-	EditMacro(i, "heal", nil, "/cast Heal")
-	check(ns.Find("heal").status == "differs", "not seen as changed")
+step("ours changed by hand shows as changed; Update restores; renamed by the player is found by its marker", function()
+	local m = find(entry("heal").macro)
+	m.body = "/cast Heal\n#mom heal"
+	check(entry("heal").status == "differs", "not seen as changed")
 	SlashCmdList.MOUSEOVERMACROS("create heal")
-	check(ns.Find("heal").status == "ok", "create didn't restore it")
-	check(ns.Find("HEAL") ~= nil, "names are case-insensitive")
+	check(entry("heal").status == "ok" and m.body == entry("heal").body, "create didn't restore it")
+	check(ns.Find("HEAL") ~= nil, "keys are case-insensitive")
+	m.name = "MyHeal"
+	local e = entry("heal")
+	check(e.status == "ok" and e.macro == "MyHeal", "renamed macro not found: " .. e.status)
+	check(MouseoverMacrosCharDB.owned.heal.name == "MyHeal", "record follows the rename")
+	SlashCmdList.MOUSEOVERMACROS("create heal")
+	check(m.name == "MyHeal", "update renamed it back")
+end)
+
+step("deleted by the player: missing, Create makes a new one with a new name", function()
+	local old = entry("rez").macro
+	local i = GetMacroIndexByName(old)
+	DeleteMacro(i)
+	local e = entry("rez")
+	check(e.status == "missing" and e.macro ~= old and isMom(e.macro), "missing state: " .. e.status)
+	SlashCmdList.MOUSEOVERMACROS("create rez")
+	check(entry("rez").status == "ok" and entry("rez").macro ~= old, "not recreated")
+end)
+
+step("new names never collide (random retries)", function()
+	local seq = { 1234, 1234, 4821 }
+	local real = math.random
+	math.random = function() return table.remove(seq, 1) or real(0, 9999) end
+	local n = ns.NewName()
+	math.random = real
+	check(n == "_mom4821", "collision not retried: " .. tostring(n))
+end)
+
+step("full everywhere: clear message, nothing created", function()
+	DeleteMacro(GetMacroIndexByName(entry("swp").macro))
+	local saveA, saveC = macros.account, macros.char
+	macros.account, macros.char = {}, {}
+	for i = 1, 120 do macros.account[i] = saveA[i] or { name = "acc" .. i, body = "/say " .. i } end
+	for i = 1, 18 do macros.char[i] = saveC[i] or { name = "chr" .. i, body = "/say " .. i } end
+	SlashCmdList.MOUSEOVERMACROS("create swp")
+	check(last():find("no room for swp", 1, true) and last():find("all used", 1, true), "full reply: " .. last())
+	macros.account, macros.char = saveA, saveC
+	SlashCmdList.MOUSEOVERMACROS("create swp")
+	check(entry("swp").status == "ok", "swp back")
 end)
 
 step("new macros go to account macros when chosen", function()
-	macros.account, macros.char = {}, {}
+	DeleteMacro(GetMacroIndexByName(entry("smite").macro))
+	DeleteMacro(GetMacroIndexByName(entry("renew").macro))
 	SlashCmdList.MOUSEOVERMACROS("where account")
 	check(MouseoverMacrosDB.where == "account", "where")
 	SlashCmdList.MOUSEOVERMACROS("create smite")
-	check(#macros.account == 1 and #macros.char == 0, "not an account macro")
+	check(MouseoverMacrosDB.owned.smite and MouseoverMacrosDB.owned.smite.scope == "account", "not an account macro")
 	SlashCmdList.MOUSEOVERMACROS("where somewhere")
 	check(last():find("character, account", 1, true), "bad choice reply: " .. last())
 	SlashCmdList.MOUSEOVERMACROS("where character")
-end)
-
-step("no editing in combat", function()
-	MOCK.combat = true
 	SlashCmdList.MOUSEOVERMACROS("create renew")
-	check(last():find("combat", 1, true), "combat reply: " .. last())
-	SlashCmdList.MOUSEOVERMACROS("install")
-	check(last():find("combat", 1, true), "combat reply (install)")
-	MOCK.combat = false
+	check(MouseoverMacrosCharDB.owned.renew.scope == "char", "character again")
 end)
 
-step("the window list: switches, Create / Update / Pick up buttons", function()
+step("combat: nothing touched, the request is queued and runs when combat ends", function()
+	DeleteMacro(GetMacroIndexByName(entry("mblast").macro))
+	MOCK.combat = true
+	SlashCmdList.MOUSEOVERMACROS("create mblast")
+	check(last():find("in combat", 1, true) and last():find("when combat ends", 1, true), "combat reply: " .. last())
+	SlashCmdList.MOUSEOVERMACROS("install")
+	check(last():find("in combat", 1, true), "combat reply (install)")
+	check(entry("mblast").status == "missing", "made in combat")
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	check(entry("mblast").status == "ok", "queue didn't run")
+	check(ns.queue.all == false and next(ns.queue.keys) == nil, "queue not emptied")
+end)
+
+step("the window list: names, states, Create / Update / Pick up buttons", function()
 	ns.app:Open()
 	local list
 	for _, w in ipairs(ns.app.sections.macros.stack.widgets) do if w.rows then list = w end end
 	check(list and #list.rows == 20, "20 rows")
-	local smite
-	for _, r in ipairs(list.rows) do if r.item.name == "smite" then smite = r end end
+	local smite, dplague
+	for _, r in ipairs(list.rows) do
+		if r.item.key == "smite" then smite = r end
+		if r.item.key == "dplague" then dplague = r end
+	end
 	check(smite.buttons[1]:GetText() == "Up to date" and smite.buttons[2]:IsShown(), "existing macro row")
+	check(smite.title:GetText():find(entry("smite").macro, 1, true), "row shows the macro name")
 	smite.buttons[2]:GetScript("OnClick")(smite.buttons[2])
-	check(MOCK.picked == GetMacroIndexByName("smite"), "pick up")
-	local renew = list.rows[1]
-	check(renew.item.name == "renew" and renew.buttons[1]:GetText() == "Create" and not renew.buttons[2]:IsShown(), "missing macro row")
-	renew.buttons[1]:GetScript("OnClick")(renew.buttons[1])
-	check(GetMacroIndexByName("renew") > 0, "Create button")
+	check(MOCK.picked == GetMacroIndexByName(entry("smite").macro), "pick up")
+	DeleteMacro(GetMacroIndexByName(entry("dplague").macro))
 	MOCK.Fire("UPDATE_MACROS")
-	renew.switch:GetScript("OnMouseDown")(renew.switch)
-	check(MouseoverMacrosDB.off.renew, "row switch")
+	check(dplague.buttons[1]:GetText() == "Create" and not dplague.buttons[2]:IsShown(), "missing macro row")
+	check(dplague.detail:GetText():find("missing", 1, true), "missing state shown")
+	dplague.buttons[1]:GetScript("OnClick")(dplague.buttons[1])
+	check(entry("dplague").status == "ok", "Create button")
+	dplague.switch:GetScript("OnMouseDown")(dplague.switch)
+	check(MouseoverMacrosDB.off.dplague, "row switch")
 	ns.app:Close()
+end)
+
+step("lost saved variables: a _mom name with our marker is recognised; the player's _mom1234 is not", function()
+	local healName = entry("heal").macro
+	MouseoverMacrosCharDB.owned.shield = nil
+	local e = entry("shield")
+	check(e.status == "ok", "marker+name not recognised: " .. e.status)
+	check(not ns.IsOurs("_mom1234"), "player's _mom1234 taken as ours")
+	check(healName == "MyHeal", "heal kept its player name")
 end)
 
 step("help, list, settings and unknown commands", function()
@@ -177,13 +335,19 @@ step("help, list, settings and unknown commands", function()
 	MOCK.log = {}
 	SlashCmdList.MOUSEOVERMACROS("list")
 	check(#MOCK.log == 20, "list lines: " .. #MOCK.log)
+	check(table.concat(MOCK.log, "\n"):find("_mom", 1, true), "list shows names")
 	SlashCmdList.MOUSEOVERMACROS("settings")
 	SlashCmdList.MOUSEOVERMACROS("bogus")
 	check(last():find("/mom help", 1, true), "unknown reply")
 end)
 
+step("the player's macros were never changed", function()
+	check(find("fort").body == PLAYER_FORT and find("Mount").body == "/cast Riding Turtle", "changed")
+	check(find("smite").body == "#showtooltip Smite\n/cast Smite", "smite changed")
+end)
+
 step("no taint: only our own globals", function()
-	local allowed = { MouseoverMacrosDB = true, SLASH_MOUSEOVERMACROS1 = true, LibStub = true }
+	local allowed = { MouseoverMacrosDB = true, MouseoverMacrosCharDB = true, SLASH_MOUSEOVERMACROS1 = true, LibStub = true }
 	for k in pairs(globalWrites) do check(allowed[k], "addon assigned the global " .. tostring(k)) end
 	check(next(StaticPopupDialogs) == nil and next(UISpecialFrames) == nil, "Blizzard lists touched")
 end)
