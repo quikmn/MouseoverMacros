@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: MouseoverMacros
-## Notes: /mom: your macros - mouseover sets, extended macros past the slot limits, backups, export/import.
+## Notes: /mom: your macros - mouseover sets, extended macros past the slot limits, backups, export/import, and a ring menu on the middle mouse button.
 ## Author: quikmn
 ## Version: 0.1.0
 ## SavedVariables: MouseoverMacrosDB
@@ -12,3 +12,6 @@ Libs\EverlookUI\EverlookUI.lua
 MouseoverMacros.lua
 Manager.lua
 Window.lua
+RingData.lua
+Ring.lua
+RingPage.lua

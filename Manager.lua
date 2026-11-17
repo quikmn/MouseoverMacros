@@ -285,7 +285,12 @@ local function ApplyBindings()
         if DB().ext[id] then SetOverrideBindingClick(bindOwner, false, key, "MoMX_" .. id, "LeftButton")
         else CDB().binds[id] = nil end
     end
+    -- the ring's key (Ring.lua), set after the macros' so it wins a clash
+    local key, button
+    if ns.RingBinding then key, button = ns.RingBinding() end
+    if key then SetOverrideBindingClick(bindOwner, false, key, button, "LeftButton") end
 end
+ns.ApplyBindings = ApplyBindings
 
 -- Every extended macro's button and this character's key bindings (out of combat).
 function ns.SyncExt()
