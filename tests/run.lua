@@ -292,9 +292,9 @@ step("combat: nothing touched, the request is queued and runs when combat ends",
 end)
 
 step("the window list: names, states, Create / Update / Pick up buttons", function()
-	ns.app:Open()
+	ns.app:Open("templates")
 	local list
-	for _, w in ipairs(ns.app.sections.macros.stack.widgets) do if w.rows then list = w end end
+	for _, w in ipairs(ns.app.sections.templates.stack.widgets) do if w.rows and not list then list = w end end
 	check(list and #list.rows == 20, "20 rows")
 	local smite, dplague
 	for _, r in ipairs(list.rows) do
@@ -325,6 +325,210 @@ step("lost saved variables: a _mom name with our marker is recognised; the playe
 	check(healName == "MyHeal", "heal kept its player name")
 end)
 
+-- Phase 2: the macro manager -------------------------------------------------
+local KNOWN = { Renew = true, Heal = true, ["Inner Focus"] = true, ["Greater Heal"] = true, Shoot = true }
+C_Spell.GetSpellInfo = function(x) if KNOWN[x] then return { name = x } end end
+C_Item = { GetItemInfoInstant = function(x) if x == "Hearthstone" then return 6948 end end }
+GetMacroIcons = function(t) for _, v in ipairs({ 135953, 136000, "Spell_Holy_Renew", "INV_Misc_Bag_07" }) do t[#t + 1] = v end end
+GetMacroItemIcons = function(t) t[#t + 1] = 133784 end
+
+step("every section of the window opens", function()
+	for _, id in ipairs({ "mine", "account", "char", "ext", "templates", "edit", "backups", "options" }) do
+		ns.app:Open(id)
+		check(ns.app.sections[id].stack, id .. " not built")
+	end
+	check(#ns.app.order == 8 and ns.app.order[1] == "mine", "sidebar order")
+	check(ns.CountsLine():find("Account", 1, true) and ns.CountsLine():find("Extended", 1, true), "counts line")
+	ns.app:Close()
+end)
+
+step("extended macros: no slot, a secure button, 1023 characters, key binding, bar macro", function()
+	local a0, c0 = GetNumMacros()
+	local long = "#showtooltip Renew\n" .. ("/cast Renew\n"):rep(80)
+	check(#long > 255 and #long <= 1023, "test text length")
+	local ok, msg, id = ns.CreateExt("Big renew", 135953, long)
+	check(ok and id == 1, "create: " .. tostring(msg))
+	local a1, c1 = GetNumMacros()
+	check(a0 == a1 and c0 == c1, "an extended macro took a slot")
+	local b = _G.MoMX_1
+	check(b and b:GetAttribute("type") == "macro" and b:GetAttribute("macrotext") == long, "secure button")
+	check(b:GetAttribute("useOnKeyDown") == false, "acts once, on release")
+	check(not ns.CreateExt("Too long", nil, ("x"):rep(1024)), "1024 accepted")
+	check(not ns.CreateExt("", nil, "/say hi"), "empty name accepted")
+	ok = ns.SaveExt(ns.ExtRef(1), "Big renew", 135953, "#showtooltip Renew\n/cast [@mouseover,help,nodead][help,nodead] Renew")
+	check(ok and b:GetAttribute("macrotext"):find("mouseover", 1, true), "save")
+	check(#ns.History(ns.ExtRef(1)) == 1 and ns.History(ns.ExtRef(1))[1].body == long, "history kept the old text")
+	ok = ns.BindExt(ns.ExtRef(1), "CTRL-1")
+	check(ok and MOCK.bindings["CTRL-1"] == "MoMX_1" and MouseoverMacrosCharDB.binds[1] == "CTRL-1", "binding")
+	local ok2, msg2, index = ns.ExtToBar(ns.ExtRef(1))
+	check(ok2 and index, "bar macro: " .. tostring(msg2))
+	local bar = ns.GameRef(index)
+	check(isMom(bar.name) and bar.body:find("/click MoMX_1", 1, true) and bar.body:find("^#showtooltip Renew"), "bar macro body: " .. bar.body)
+	check(ns.Cost(ns.ExtRef(1)):find(bar.name, 1, true), "cost names the bar macro")
+	ns.SaveExt(ns.ExtRef(1), "Big renew", 135953, "#showtooltip Heal\n/cast Heal")
+	check(ns.Fresh(bar).body:find("^#showtooltip Heal"), "bar macro follows the tooltip line")
+	check(#ns.List("ext") == 1 and #ns.List("mine") > 20, "lists")
+end)
+
+step("extended macros in combat: queued, applied after", function()
+	MOCK.combat = true
+	local ok, msg = ns.SaveExt(ns.ExtRef(1), "Big renew", 135953, "/cast Renew")
+	check(ok and msg == "queued" and last():find("in combat", 1, true), "combat reply: " .. last())
+	check(_G.MoMX_1:GetAttribute("macrotext") == "#showtooltip Heal\n/cast Heal", "changed in combat")
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	check(_G.MoMX_1:GetAttribute("macrotext") == "/cast Renew", "not applied after combat")
+	check(logHas("saved Big renew"), "after-combat report: " .. last())
+end)
+
+step("editor: the player's own macro can be edited here; limits; history and restore", function()
+	local mount = ns.GameRef(GetMacroIndexByName("Mount"))
+	check(not mount.ours, "Mount is not ours")
+	ns.Edit(mount)
+	check(ns.app.current == "edit" and ns.ed.body == "/cast Riding Turtle", "editor loaded")
+	ns.ed.body = "/cast Riding Turtle\n/say off we go"
+	local ok = ns.EditorSave()
+	check(ok and find("Mount").body == "/cast Riding Turtle\n/say off we go", "saved")
+	check(ns.History(ns.ed.ref)[1].body == "/cast Riding Turtle", "history")
+	ns.ed.name = "A name over sixteen"
+	check(not ns.EditorSave(), "long name accepted")
+	ns.ed.name, ns.ed.body = "Mount", ("x"):rep(256)
+	check(not ns.EditorSave(), "256 characters accepted in a game macro")
+	ns.ed.body = ns.History(ns.ed.ref)[1].body
+	ns.EditorSave()
+	check(find("Mount").body == "/cast Riding Turtle", "restore")
+	ns.ed.name = "Mount2"
+	ns.EditorSave()
+	check(find("Mount2") and ns.ed.ref.name == "Mount2" and #ns.History(ns.ed.ref) == 2, "rename keeps the history")
+	ns.EditorInsert("[mod:shift] ")
+	check(ns.ed.body:find("[mod:shift]", 1, true), "insert")
+	check(not find("_mom1234").body:find("#mom", 1, true), "player's _mom1234 untouched")
+end)
+
+step("a new macro from the editor: character, account, extended", function()
+	ns.EditNew("account")
+	ns.ed.name, ns.ed.body = "Hearth", "/use Hearthstone"
+	check(ns.EditorSave() and ns.ed.ref and ns.ed.ref.scope == "account", "account macro")
+	ns.EditNew("char")
+	ns.ed.name, ns.ed.body = "CharOne", "/say hi"
+	local ok, msg = ns.EditorSave()
+	check(not ok and msg:find("character macros are full", 1, true), "full character reply: " .. tostring(msg))
+	ns.EditNew("ext")
+	ns.ed.name, ns.ed.body = "ExtOne", "/say hi"
+	check(ns.EditorSave() and ns.ed.ref.kind == "ext", "extended")
+	check(ns.EditorSave(true) and ns.ed.ref.kind == "ext" and #ns.List("ext") == 3, "save as copy")
+end)
+
+step("move to account / character respects the slot limits; ours keeps its record", function()
+	local heal = ns.Fresh({ kind = "game", scope = "char", name = "MyHeal" })
+	check(heal and heal.ours and heal.scope == "char", "heal is a character macro of ours")
+	local ok, msg = ns.MoveGame(heal, "account")
+	check(ok and find("MyHeal") and GetMacroIndexByName("MyHeal") <= 120, "moved: " .. tostring(msg))
+	check(MouseoverMacrosDB.owned.heal and MouseoverMacrosDB.owned.heal.scope == "account" and not MouseoverMacrosCharDB.owned.heal, "record moved")
+	check(entry("heal").status == "ok", "still ours")
+	-- back: character has a free slot now
+	ok = ns.MoveGame(ns.Fresh({ kind = "game", scope = "account", name = "MyHeal" }), "char")
+	check(ok, "moved back")
+	ok, msg = ns.MoveGame(ns.Fresh({ kind = "game", scope = "account", name = "Hearth" }), "char")
+	check(not ok and msg:find("no room", 1, true), "full move: " .. tostring(msg))
+end)
+
+step("delete asks twice, goes to the bin, restores", function()
+	ns.Edit(ns.Fresh({ kind = "game", scope = "account", name = "Hearth" }))
+	local row
+	for _, w in ipairs(ns.app.sections.edit.stack.widgets) do
+		if w.buttons and #w.buttons == 5 then row = w end
+	end
+	local del = row.buttons[5]
+	del:GetScript("OnClick")(del)
+	check(find("Hearth"), "deleted on the first click")
+	del:GetScript("OnClick")(del)
+	check(not find("Hearth"), "not deleted on the second click")
+	check(MouseoverMacrosDB.bin[1].name == "Hearth", "not in the bin")
+	ns.app:Open("backups")
+	local list
+	for _, w in ipairs(ns.app.sections.backups.stack.widgets) do if w.rows and not list then list = w end end
+	list.rows[1].buttons[1]:GetScript("OnClick")(list.rows[1].buttons[1])
+	check(find("Hearth") and find("Hearth").body == "/use Hearthstone", "restore from the bin")
+	-- deleting an extended macro takes its bar macro and key with it
+	local barName = ns.ExtBarMacro(1).name
+	check(ns.DeleteExt(ns.ExtRef(1)), "delete ext")
+	check(not find(barName) and MOCK.bindings["CTRL-1"] == nil and not MouseoverMacrosDB.ext[1], "ext leftovers")
+end)
+
+step("export / import round trip; nothing replaced", function()
+	local odd = "#showtooltip\n/say a|b; c, d 100%\n/cast Renew"
+	local _, _, id = ns.CreateExt("Odd one", "Spell_Holy_Renew", odd)
+	local text = ns.Export({ ns.ExtRef(id), ns.Fresh({ kind = "game", scope = "account", name = "Hearth" }) })
+	check(text:match("^MOM1\n") and not text:find("|", 1, true), "export text: " .. text)
+	local list = assert(ns.ParseExport(text))
+	check(#list == 2 and list[1].body == odd and list[1].icon == "Spell_Holy_Renew" and list[2].kind == "a", "parse")
+	local nExt = #ns.List("ext")
+	local ok, msg = ns.Import(list, "x")
+	check(ok and #ns.List("ext") == nExt + 2, "import as extended: " .. tostring(msg))
+	ok = ns.Import({ list[2] })
+	check(ok and find("Hearth 2") and find("Hearth").body == "/use Hearthstone", "taken name numbered, original kept")
+	check(not ns.ParseExport("hello"), "garbage accepted")
+	-- the window buttons
+	ns.app:Open("backups")
+	local exportRow
+	for _, w in ipairs(ns.app.sections.backups.stack.widgets) do
+		if w.buttons and w.buttons[1]:GetText() == "Export" then exportRow = w end
+	end
+	exportRow.buttons[1]:GetScript("OnClick")(exportRow.buttons[1])
+	check(ns.exportBox:GetText():match("^MOM1"), "export button")
+end)
+
+step("line check: unknown spells, #showtooltip placement, slots and sequences", function()
+	local p = ns.CheckLines("#showtooltip Renew\n/cast [@mouseover,help,nodead][help,nodead] Renew\n/cast Renwe\n#showtooltip\n/use 13\n/use Hearthstone\n/castsequence reset=3 Renew, Heal, Smiite")
+	local lines = {}
+	for _, x in ipairs(p) do lines[#lines + 1] = x.line .. ":" .. x.text end
+	local s = table.concat(lines, "\n")
+	check(#p == 3, "problems:\n" .. s)
+	check(s:find('3:"Renwe"', 1, true) and s:find("4:#showtooltip only", 1, true) and s:find('7:"Smiite"', 1, true), s)
+	check(#ns.CheckLines(("x"):rep(300), 255) == 1, "length")
+end)
+
+step("templates: a _mom macro (updated, not duplicated) or an extended one", function()
+	local t = ns.Templates()[1]
+	check(t.id == "trinkets", "first template")
+	local ok, msg = ns.MakeTemplate(t)
+	check(ok and ns.Resolve("t:trinkets"), "made: " .. tostring(msg))
+	local _, name = ns.Resolve("t:trinkets")
+	local before = GetNumMacros()
+	ns.MakeTemplate(t)
+	check(GetNumMacros() == before and select(2, ns.Resolve("t:trinkets")) == name, "duplicated")
+	local nExt = #ns.List("ext")
+	check(ns.MakeTemplate(t, true) and #ns.List("ext") == nExt + 1, "extended template")
+	local ids = {}
+	for _, x in ipairs(ns.Templates()) do ids[x.id] = true end
+	check(ids.wand and ids.ifheal, "priest templates")
+end)
+
+step("icon search: ? first, file names and IDs", function()
+	local all = ns.SearchIcons("")
+	check(all[1] == 134400 and #all == 6, "all icons: " .. #all)
+	local r = ns.SearchIcons("renew")
+	check(r[1] == 134400 and r[2] == "Spell_Holy_Renew" and #r == 2, "by name")
+	check(#ns.SearchIcons("1359") == 2, "by ID")
+	ns.EditNew("ext")
+	ns.ed.picking = true
+	ns.app:Refresh()
+	check(ns.picker:IsShown(), "picker shown")
+	ns.picker.cells[2]:GetScript("OnClick")(ns.picker.cells[2])
+	check(ns.ed.icon == 135953 and not ns.ed.picking, "pick an icon")
+	ns.app:Close()
+end)
+
+step("extended macros come back after a reload: buttons and bindings", function()
+	local _, _, id = ns.CreateExt("Bound", nil, "/say bound")
+	ns.BindExt(ns.ExtRef(id), "F5")
+	_G["MoMX_" .. id]:SetAttribute("macrotext", nil)
+	wipe(MOCK.bindings)
+	MOCK.Fire("PLAYER_ENTERING_WORLD")
+	check(_G["MoMX_" .. id]:GetAttribute("macrotext") == "/say bound" and MOCK.bindings.F5 == "MoMX_" .. id, "not restored")
+end)
+
 step("help, list, settings and unknown commands", function()
 	MOCK.log = {}
 	SlashCmdList.MOUSEOVERMACROS("help")
@@ -342,7 +546,7 @@ step("help, list, settings and unknown commands", function()
 end)
 
 step("the player's macros were never changed", function()
-	check(find("fort").body == PLAYER_FORT and find("Mount").body == "/cast Riding Turtle", "changed")
+	check(find("fort").body == PLAYER_FORT and find("Mount2").body == "/cast Riding Turtle", "changed") -- Mount2: renamed by the player in the editor
 	check(find("smite").body == "#showtooltip Smite\n/cast Smite", "smite changed")
 end)
 

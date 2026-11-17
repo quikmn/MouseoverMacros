@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: MouseoverMacros
-## Notes: /mom: mouseover macros for your class (mouseover, then target; never yourself).
+## Notes: /mom: your macros - mouseover sets, extended macros past the slot limits, backups, export/import.
 ## Author: quikmn
 ## Version: 0.1.0
 ## SavedVariables: MouseoverMacrosDB
@@ -10,3 +10,5 @@
 Libs\LibStub\LibStub.lua
 Libs\EverlookUI\EverlookUI.lua
 MouseoverMacros.lua
+Manager.lua
+Window.lua

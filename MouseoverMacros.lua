@@ -147,11 +147,13 @@ local function FindNamed(name, scope)
 end
 
 local function Records()
-    local list = {}
+    local list = {}  -- { key, rec } for every record of ours this character can see
     if cdb then for key, rec in pairs(cdb.owned) do list[#list + 1] = { key = key, rec = rec } end end
     if db then for key, rec in pairs(db.owned) do list[#list + 1] = { key = key, rec = rec } end end
     return list
 end
+
+ns.Records = Records
 
 -- True when `name` is a macro of ours (in that scope, if given).
 function ns.IsOurs(name, scope)
@@ -285,6 +287,8 @@ function ns.Install(e)
     if InCombatLockdown() then return "combat" end
     local index, name = ns.Resolve(e.key)
     if index then
+        local _, _, old = GetMacroInfo(index)
+        if Trim(old) ~= Trim(e.body) and ns.PushHistory then ns.PushHistory(ns.GameRef(index), old) end
         EditMacro(index, name, nil, e.body)
         return "updated", name
     end
@@ -322,7 +326,7 @@ end
 ------------------------------------------------------------------------
 -- Combat queue: macros can't be changed in combat; the request runs when combat ends.
 ------------------------------------------------------------------------
-local queue = { keys = {}, all = false, migrate = false }
+local queue = { keys = {}, all = false, migrate = false, jobs = {} }
 ns.queue = queue
 
 ------------------------------------------------------------------------
@@ -332,15 +336,25 @@ local app = UI:NewApp({
     name = "MouseoverMacros",
     addon = ADDON,
     slash = "/mom",
-    tagline = "Mouseover macros for your class: mouseover first, then your target, never yourself.",
+    tagline = "Your macros: mouseover sets, extended macros past the slot limits, backups.",
     accent = { 0.25, 0.75, 1.0 },
-    width = 640, height = 600,
+    width = 860, height = 640,
     position = function() return db end,
 })
 ns.app = app
 
 local function Queued(what)
     app:Print("|cffffb347in combat:|r macros can't be changed now. " .. what .. " will happen when combat ends.")
+end
+
+-- Run fn now, or (in combat) after combat. Returns true when it had to wait.
+function ns.Defer(what, fn)
+    if InCombatLockdown() then
+        queue.jobs[#queue.jobs + 1] = fn
+        Queued(what)
+        return true
+    end
+    fn()
 end
 
 local function InstallOne(e)
@@ -404,6 +418,9 @@ end
 ns.RunMigration = RunMigration
 
 local function RunQueue()
+    local jobs = queue.jobs
+    queue.jobs = {}
+    for _, fn in ipairs(jobs) do fn() end
     if queue.migrate then queue.migrate = false; RunMigration() end
     if queue.all then
         queue.all = false
@@ -513,54 +530,8 @@ local function SpellIcon(spell)
 end
 ns.SpellIcon = SpellIcon
 
-local BUTTON = { new = "Create", missing = "Create", legacy = "Adopt", differs = "Update", ok = "Up to date" }
-
-app:Section("macros", "Macros", function(stack)
-    UI.Header(stack, "Your macros", "Switched-on macros are made by \"Create / update all\". /mom only ever changes the _mom macros it made itself; your own macros are never touched.")
-    UI.ButtonRow(stack, {
-        { label = "Create / update all", width = 180, style = "accent", onClick = function() ns.InstallAll() end,
-            desc = "Every switched-on macro. Ours are edited in place, so your action bars keep working." },
-        { label = "All on", width = 90, onClick = function() db.off = {}; app:Refresh() end },
-        { label = "All off", width = 90, onClick = function()
-            for _, e in ipairs(ns.Entries()) do db.off[e.key] = true end
-            app:Refresh()
-        end },
-    })
-    UI.List(stack, {
-        items = ns.Entries,
-        rowHeight = 40,
-        empty = "No macros for your class yet (Priest so far).",
-        toggle = { get = function(e) return e.on end, set = function(e, on) db.off[e.key] = (not on) or nil end },
-        icon = function(e) return SpellIcon(e.spell) end,
-        title = function(e)
-            local name = e.index and e.status ~= "legacy" and ("|cffffffff" .. e.macro .. "|r") or ("|cff8d94a3" .. e.macro .. "|r")
-            return e.key .. "  " .. name .. "  |cff8d94a3" .. e.spell .. "|r"
-        end,
-        -- the state first: the row is too narrow for everything, and the tooltip has the rest
-        detail = function(e)
-            if e.clash then return "|cffffb347" .. ClashNote(e) .. "|r" end
-            return STATUS[e.status] .. Where(e) .. "  |cff8d94a3-  " .. e.desc .. "|r"
-        end,
-        tooltip = function(e)
-            local t = { e.key .. " - " .. e.spell, e.desc, STATUS[e.status] .. Where(e),
-                "Macro name: " .. e.macro .. (e.index and "" or " (when created)") }
-            if e.clash then t[#t + 1] = "|cffffb347" .. ClashNote(e) .. "|r" end
-            t[#t + 1] = " "
-            t[#t + 1] = (e.body:gsub("|", "||"))
-            return t
-        end,
-        buttons = {
-            { label = function(e) return BUTTON[e.status] end,
-                width = 90, onClick = function(e) InstallOne(e) end, usable = function(e) return e.status ~= "ok" end },
-            { label = "Pick up", width = 74, onClick = function(e) if e.index and PickupMacro then PickupMacro(e.index) end end,
-                shown = function(e) return e.index ~= nil end },
-        },
-    })
-    UI.Header(stack, "Options")
-    app:Widget(stack, "where")
-    app:Widget(stack, "autoselfcast")
-    UI.Note(stack, "Pick up puts the macro on your cursor: drop it on an action bar slot. Bar addons show a macro's name under the button (\"_mom4821\"); Bartender4 can hide it with its \"Hide Macro Text\" option.")
-end)
+ns.InstallOne = InstallOne
+ns.Where = Where
 
 SLASH_MOUSEOVERMACROS1 = "/mom"
 SlashCmdList.MOUSEOVERMACROS = function(msg) app:HandleSlash(msg) end

@@ -1,0 +1,548 @@
+-- MouseoverMacros: the /mom window. Sidebar: Mine, Account, Character, Extended, Templates, Edit,
+-- Backups, Options.
+local _, ns = ...
+local UI = LibStub("EverlookUI-1")
+local app = ns.app
+local QM = ns.QUESTION_MARK
+
+local function Say(ok, msg)
+    if msg and msg ~= "queued" then app:Print((ok and "" or "|cffff6060") .. msg .. (ok and "" or "|r")) end
+    app:Refresh()
+end
+
+local function Date(t)
+    if date and t and t > 0 then return date("%Y-%m-%d %H:%M", t) end
+    return "earlier"
+end
+
+local function FirstLine(body)
+    for line in tostring(body or ""):gmatch("[^\n]+") do
+        if not line:match("^%s*#") then return line end
+    end
+    return tostring(body or ""):match("[^\n]*") or ""
+end
+
+local function Esc(s) return UI.Util.Escape(s or "") end
+
+------------------------------------------------------------------------
+-- The editor's state
+------------------------------------------------------------------------
+-- ed.ref: the macro being edited (nil: a new one); ed.as: for a new one, "char", "account" or "ext".
+local ed = { name = "", icon = QM, body = "", as = "char" }
+ns.ed = ed
+
+function ns.Edit(ref)
+    ref = ns.Fresh(ref) or ref
+    ed.ref = ref
+    ed.name, ed.icon, ed.body = ref.name, ref.icon or QM, ref.body or ""
+    ed.picking = false
+    app:Open("edit")
+    app:Refresh()
+end
+
+function ns.EditNew(as)
+    ed.ref = nil
+    ed.as = as or "char"
+    ed.name, ed.icon, ed.body = "", QM, "#showtooltip\n"
+    ed.picking = false
+    app:Open("edit")
+    app:Refresh()
+end
+
+local function EdKind() return ed.ref and ed.ref.kind or (ed.as == "ext" and "ext" or "game") end
+local function EdLimit() return EdKind() == "ext" and ns.MAX_EXT or ns.MAX_BODY end
+
+-- Save what is in the editor. Returns ok, message.
+function ns.EditorSave(asCopy)
+    local ok, msg, id
+    local name, icon, body = ns.Trim(ed.name), ed.icon, ed.body
+    if ed.ref and not asCopy then
+        if ed.ref.kind == "ext" then
+            ok, msg = ns.SaveExt(ed.ref, name, icon, body)
+            ed.ref = ns.ExtRef(ed.ref.id) or ed.ref
+        else
+            ok, msg = ns.SaveGame(ed.ref, name, icon, body)
+            if ok and msg ~= "queued" then ed.ref = ns.Fresh({ kind = "game", scope = ed.ref.scope, name = name }) or ed.ref end
+        end
+    else
+        local as = ed.ref and (ed.ref.kind == "ext" and "ext" or ed.ref.scope) or ed.as
+        if asCopy and ed.ref and as ~= "ext" and ns.EachMacro(as, function(_, n) return n == name end) then
+            name = name:sub(1, ns.MAX_NAME - 2) .. " 2"
+        end
+        if as == "ext" then
+            ok, msg, id = ns.CreateExt(name, icon, body)
+            if ok and id then ed.ref = ns.ExtRef(id) end
+        else
+            ok, msg = ns.CreateGame(as, name, icon, body)
+            if ok and msg ~= "queued" then ed.ref = ns.Fresh({ kind = "game", scope = as, name = name }) end
+        end
+        if ed.ref then ed.name = ed.ref.name end
+    end
+    Say(ok, msg)
+    return ok, msg
+end
+
+------------------------------------------------------------------------
+-- Lists of macros
+------------------------------------------------------------------------
+local filters = {}
+
+local function Matches(ref, text)
+    if not text or text == "" then return true end
+    text = text:lower()
+    return ref.name:lower():find(text, 1, true) or (ref.body or ""):lower():find(text, 1, true)
+end
+
+local function CountsLine()
+    local a, maxA, c, maxC, x = ns.Counts()
+    local function col(n, max) return n >= max and "|cffff8a8a" or "|cffffffff" end
+    return ("Account %s%d/%d|r   Character %s%d/%d|r   Extended |cffffffff%d|r (no slots)"):format(
+        col(a, maxA), a, maxA, col(c, maxC), c, maxC, x)
+end
+ns.CountsLine = CountsLine
+
+local function PickUp(ref)
+    if ref.kind == "ext" then
+        local bar = ns.ExtBarMacro(ref.id)
+        if bar and PickupMacro then PickupMacro(bar.index) end
+        return
+    end
+    local cur = ns.Fresh(ref)
+    if cur and PickupMacro then PickupMacro(cur.index) end
+end
+ns.PickUp = PickUp
+
+local function MacroList(stack, which)
+    UI.Input(stack, {
+        placeholder = "Search names and text", width = 300,
+        onChange = function(text) filters[which] = text; stack:RefreshAll() end,
+    })
+    return UI.List(stack, {
+        items = function()
+            local out = {}
+            for _, r in ipairs(ns.List(which)) do if Matches(r, filters[which]) then out[#out + 1] = r end end
+            return out
+        end,
+        rowHeight = 40,
+        empty = which == "ext" and "No extended macros yet. \"New extended macro\" makes one; they need no slot." or "Nothing here.",
+        icon = function(r) return r.icon or QM end,
+        title = function(r)
+            local tag = r.kind == "ext" and "  |cff40c0ffextended|r" or (r.ours and "  |cff62cf88made by /mom|r" or "")
+            return Esc(r.name) .. tag
+        end,
+        detail = function(r) return "|cff8d94a3" .. ns.Cost(r) .. "  -  " .. Esc(FirstLine(r.body)) .. "|r" end,
+        tooltip = function(r)
+            local t = { r.name, ns.Cost(r), " " }
+            for line in (r.body or ""):gmatch("[^\n]+") do t[#t + 1] = Esc(line) end
+            return t
+        end,
+        onClick = function(r) ns.Edit(r) end,
+        buttons = {
+            { label = "Edit", width = 60, onClick = function(r) ns.Edit(r) end },
+            { label = "Pick up", width = 70, onClick = function(r) PickUp(r) end,
+                shown = function(r) return r.kind == "game" or ns.ExtBarMacro(r.id) ~= nil end },
+        },
+    })
+end
+
+app:Section("mine", "Mine", function(stack)
+    UI.Header(stack, "Made by /mom", "Macros /mom made for you (_mom names) and your extended macros. Click one to edit it.")
+    UI.Note(stack, CountsLine)
+    UI.ButtonRow(stack, {
+        { label = "New extended macro", width = 170, style = "accent", onClick = function() ns.EditNew("ext") end,
+            desc = "Stored by /mom, up to 1023 characters, no macro slot. Run it with a key, or put it on a bar through a one-line macro (one slot)." },
+    })
+    MacroList(stack, "mine")
+end)
+
+app:Section("account", "Account", function(stack)
+    UI.Header(stack, "Account macros", "Shared by all your characters. Yours and /mom's alike: edit any of them here.")
+    UI.Note(stack, CountsLine)
+    UI.ButtonRow(stack, { { label = "New account macro", width = 170, style = "accent", onClick = function() ns.EditNew("account") end } })
+    MacroList(stack, "account")
+end)
+
+app:Section("char", "Character", function(stack)
+    UI.Header(stack, "Character macros", "Only this character's. The game allows " .. ns.MaxChar() .. "; when they are full, use account or extended macros.")
+    UI.Note(stack, CountsLine)
+    UI.ButtonRow(stack, { { label = "New character macro", width = 170, style = "accent", onClick = function() ns.EditNew("char") end } })
+    MacroList(stack, "char")
+end)
+
+app:Section("ext", "Extended", function(stack)
+    UI.Header(stack, "Extended macros", "Past the slot limits: as many as you like, up to 1023 characters each, on every character. "
+        .. "Each one runs from a hidden button. Give it a key (no slot), or \"Put on a bar\" makes a one-line macro that clicks it (one slot).")
+    UI.Note(stack, CountsLine)
+    UI.ButtonRow(stack, { { label = "New extended macro", width = 170, style = "accent", onClick = function() ns.EditNew("ext") end } })
+    MacroList(stack, "ext")
+end)
+
+------------------------------------------------------------------------
+-- Templates: the class's mouseover set and a few common ones
+------------------------------------------------------------------------
+local BUTTON = { new = "Create", missing = "Create", legacy = "Adopt", differs = "Update", ok = "Up to date" }
+
+app:Section("templates", "Templates", function(stack)
+    UI.Header(stack, "Mouseover set", "Switched-on macros are made by \"Create / update all\". /mom only ever changes the _mom macros it made itself; your own macros are never touched.")
+    UI.ButtonRow(stack, {
+        { label = "Create / update all", width = 180, style = "accent", onClick = function() ns.InstallAll() end,
+            desc = "Every switched-on macro. Ours are edited in place, so your action bars keep working." },
+        { label = "All on", width = 90, onClick = function() ns.db.off = {}; app:Refresh() end },
+        { label = "All off", width = 90, onClick = function()
+            for _, e in ipairs(ns.Entries()) do ns.db.off[e.key] = true end
+            app:Refresh()
+        end },
+    })
+    UI.List(stack, {
+        items = ns.Entries,
+        rowHeight = 40,
+        empty = "No mouseover set for your class yet (Priest so far).",
+        toggle = { get = function(e) return e.on end, set = function(e, on) ns.db.off[e.key] = (not on) or nil end },
+        icon = function(e) return ns.SpellIcon(e.spell) end,
+        title = function(e)
+            local name = e.index and e.status ~= "legacy" and ("|cffffffff" .. e.macro .. "|r") or ("|cff8d94a3" .. e.macro .. "|r")
+            return e.key .. "  " .. name .. "  |cff8d94a3" .. e.spell .. "|r"
+        end,
+        -- the state first: the row is too narrow for everything, and the tooltip has the rest
+        detail = function(e)
+            if e.clash then return "|cffffb347" .. ns.ClashNote(e) .. "|r" end
+            return ns.STATUS[e.status] .. ns.Where(e) .. "  |cff8d94a3-  " .. e.desc .. "|r"
+        end,
+        tooltip = function(e)
+            local t = { e.key .. " - " .. e.spell, e.desc, ns.STATUS[e.status] .. ns.Where(e),
+                "Macro name: " .. e.macro .. (e.index and "" or " (when created)") }
+            if e.clash then t[#t + 1] = "|cffffb347" .. ns.ClashNote(e) .. "|r" end
+            t[#t + 1] = " "
+            t[#t + 1] = Esc(e.body)
+            return t
+        end,
+        buttons = {
+            { label = function(e) return BUTTON[e.status] end,
+                width = 90, onClick = function(e) ns.InstallOne(e) end, usable = function(e) return e.status ~= "ok" end },
+            { label = "Pick up", width = 74, onClick = function(e) if e.index and PickupMacro then PickupMacro(e.index) end end,
+                shown = function(e) return e.index ~= nil end },
+        },
+    })
+    UI.Header(stack, "More templates", "Made as a _mom macro (one slot, /mom keeps it up to date) or as an extended macro (no slot).")
+    UI.List(stack, {
+        items = ns.Templates,
+        rowHeight = 40,
+        icon = function() return QM end,
+        title = function(t)
+            local i, name = ns.Resolve("t:" .. t.id)
+            return t.title .. (i and ("  |cffffffff" .. name .. "|r") or "")
+        end,
+        detail = function(t) return "|cff8d94a3" .. t.desc .. "|r" end,
+        tooltip = function(t)
+            local out = { t.title, t.desc, " " }
+            for line in t.body:gmatch("[^\n]+") do out[#out + 1] = Esc(line) end
+            return out
+        end,
+        buttons = {
+            { label = function(t) return ns.Resolve("t:" .. t.id) and "Update" or "Make" end, width = 70,
+                onClick = function(t) Say(ns.MakeTemplate(t)) end },
+            { label = "Extended", width = 80, onClick = function(t) Say(ns.MakeTemplate(t, true)) end },
+        },
+    })
+    UI.Note(stack, "Pick up puts the macro on your cursor: drop it on an action bar slot. Bar addons show a macro's name under the button (\"_mom4821\"); Bartender4 can hide it with its \"Hide Macro Text\" option.")
+end)
+
+------------------------------------------------------------------------
+-- Editor
+------------------------------------------------------------------------
+local INSERTS = {
+    { "#showtooltip", "#showtooltip\n" }, { "/cast", "/cast " }, { "/use", "/use " }, { "/stopcasting", "/stopcasting\n" },
+    { "mouseover friend", "[@mouseover,help,nodead][help,nodead] " }, { "mouseover enemy", "[@mouseover,harm,nodead][harm,nodead] " },
+    { "mouseover any", "[@mouseover,exists,nodead][exists,nodead] " }, { "focus", "[@focus,exists,nodead] " },
+    { "shift", "[mod:shift] " }, { "ctrl", "[mod:ctrl] " }, { "alt", "[mod:alt] " }, { "dead", "[@mouseover,help,dead][help,dead] " },
+}
+
+local ICON_COLS, ICON_ROWS, ICON_SIZE = 16, 4, 30
+
+app:Section("edit", "Edit", function(stack)
+    local T = stack.T
+    UI.Note(stack, function()
+        if ed.ref then
+            return ("|cffffffff%s|r  -  %s%s"):format(Esc(ed.ref.name), ns.Cost(ed.ref),
+                ed.ref.kind == "game" and not ed.ref.ours and "  |cff8d94a3(yours: /mom only changes it when you save it here)|r" or "")
+        end
+        return "|cffffffffNew " .. (ed.as == "ext" and "extended" or ed.as == "account" and "account" or "character") .. " macro|r  -  " ..
+            (ed.as == "ext" and "no slot" or "takes one " .. (ed.as == "account" and "account" or "character") .. " slot")
+    end)
+    UI.Dropdown(stack, {
+        label = "Kind (new macros)", width = 260,
+        items = { { value = "char", text = "Character macro (255)" }, { value = "account", text = "Account macro (255)" }, { value = "ext", text = "Extended macro (1023, no slot)" } },
+        get = function() return ed.as end, set = function(v) ed.as = v end, after = function() app:Refresh() end,
+        disabled = function() return ed.ref ~= nil end,
+    })
+    UI.Input(stack, {
+        label = "Name", width = 260,
+        get = function() return ed.name end, set = function(v) ed.name = v end,
+        onChange = function(text) ed.name = text end,
+    })
+
+    -- icon: the current one, "Change icon" opens the picker
+    local iconRow = CreateFrame("Frame")
+    iconRow:SetParent(stack.parent)
+    local tex = iconRow:CreateTexture(nil, "ARTWORK")
+    tex:SetSize(26, 26)
+    tex:SetPoint("LEFT")
+    local change = UI.Button(iconRow, "Change icon", function() ed.picking = not ed.picking; stack:RefreshAll() end, 120)
+    change:SetPoint("LEFT", 36, 0)
+    local dyn = UI.Button(iconRow, "? (follows the spell)", function() ed.icon = QM; stack:RefreshAll() end, 170)
+    dyn:SetPoint("LEFT", change, "RIGHT", 8, 0)
+    UI.Tooltip(dyn, "Dynamic icon", "The question mark icon: with #showtooltip the button shows the icon of the spell it will cast.")
+    function iconRow:Refresh() tex:SetTexture(ed.icon or QM) end
+    stack:Add(iconRow, 28)
+    iconRow:Refresh()
+
+    -- icon picker (shown while picking)
+    local picker = CreateFrame("Frame")
+    picker:SetParent(stack.parent)
+    local search = UI.EditBox(picker, 240, 24)
+    search:SetPoint("TOPLEFT")
+    local page, found = 1, nil
+    local pageText = UI.Text(picker, T.font, T.muted)
+    local prev = UI.Button(picker, "<", function() page = math.max(1, page - 1); picker:Refresh() end, 30)
+    local nextB = UI.Button(picker, ">", function() page = page + 1; picker:Refresh() end, 30)
+    prev:SetPoint("LEFT", search, "RIGHT", 8, 0)
+    nextB:SetPoint("LEFT", prev, "RIGHT", 4, 0)
+    pageText:SetPoint("LEFT", nextB, "RIGHT", 8, 0)
+    UI.Tooltip(search, "Search icons", "A spell name from your spellbook, part of an icon's file name, or a file ID.")
+    search:SetScript("OnTextChanged", function(self, user) if user then found = nil; page = 1; picker:Refresh() end end)
+    picker.cells = {}
+    for i = 1, ICON_COLS * ICON_ROWS do
+        local b = CreateFrame("Button", nil, picker)
+        b:SetSize(ICON_SIZE, ICON_SIZE)
+        b:SetPoint("TOPLEFT", ((i - 1) % ICON_COLS) * (ICON_SIZE + 4), -30 - math.floor((i - 1) / ICON_COLS) * (ICON_SIZE + 4))
+        b.tex = b:CreateTexture(nil, "ARTWORK")
+        b.tex:SetAllPoints()
+        b:SetScript("OnClick", function(self) if self.icon then ed.icon = self.icon; ed.picking = false; stack:RefreshAll() end end)
+        picker.cells[i] = b
+    end
+    local pickerH = 30 + ICON_ROWS * (ICON_SIZE + 4) + 4
+    function picker:Refresh()
+        self:SetShown(ed.picking and true or false)
+        stack:SetHeightOf(self, ed.picking and pickerH or 1)
+        if not ed.picking then return end
+        found = found or ns.SearchIcons(search:GetText())
+        local per = ICON_COLS * ICON_ROWS
+        local pages = math.max(1, math.ceil(#found / per))
+        page = math.min(page, pages)
+        pageText:SetText(("%d / %d  (%d icons)"):format(page, pages, #found))
+        for i, b in ipairs(self.cells) do
+            local icon = found[(page - 1) * per + i]
+            b.icon = icon
+            b.tex:SetTexture(icon)
+            b:SetShown(icon ~= nil)
+        end
+    end
+    picker.search = search
+    ns.picker = picker
+    stack:Add(picker, 1)
+    picker:Refresh()
+
+    -- the text
+    local area = UI.TextArea(stack.parent, stack.width, 150)
+    local box = area.box
+    box:SetScript("OnTextChanged", function(self, user)
+        if user then ed.body = self:GetText(); stack:RefreshAll() end
+    end)
+    function area:Refresh() if not box:HasFocus() then box:SetText(ed.body or "") end end
+    stack:Add(area, 150)
+    area:Refresh()
+    ns.editorBox = box
+
+    -- live count and line check
+    UI.Note(stack, function()
+        local n, limit = #(ed.body or ""), EdLimit()
+        local col = n > limit and "|cffff6060" or (n > limit - 20 and "|cffffb347" or "|cff62cf88")
+        local lines = { ("%s%d / %d characters|r"):format(col, n, limit) }
+        for _, p in ipairs(ns.CheckLines(ed.body, limit)) do
+            if p.line > 0 then lines[#lines + 1] = ("|cffffb347line %d:|r %s"):format(p.line, Esc(p.text)) end
+        end
+        if #lines == 1 then lines[1] = lines[1] .. "  |cff8d94a3- every spell and item name checks out|r" end
+        return table.concat(lines, "\n")
+    end)
+
+    local function Insert(text)
+        local before = box:GetText() or ""
+        box:Insert(text)
+        if (box:GetText() or "") == before then box:SetText(before .. text) end -- no cursor to insert at
+        ed.body = box:GetText()
+        stack:RefreshAll()
+    end
+    ns.EditorInsert = Insert
+    local rows = { {}, {} }
+    for i, d in ipairs(INSERTS) do
+        local row = rows[i <= 6 and 1 or 2]
+        row[#row + 1] = { label = d[1], width = i <= 4 and 96 or 116, onClick = function() Insert(d[2]) end, desc = "Inserts " .. d[2]:gsub("\n", "") }
+    end
+    UI.ButtonRow(stack, rows[1])
+    UI.ButtonRow(stack, rows[2])
+
+    UI.ButtonRow(stack, {
+        { label = "Save", width = 90, style = "accent", onClick = function() ns.EditorSave() end },
+        { label = "Save as copy", width = 120, onClick = function() ns.EditorSave(true) end },
+        { label = "Pick up", width = 80, onClick = function() if ed.ref then PickUp(ed.ref) end end },
+        { label = "Move", width = 170, onClick = function()
+            if not ed.ref or ed.ref.kind ~= "game" then return end
+            local ok, msg = ns.MoveGame(ed.ref, ed.ref.scope == "account" and "char" or "account")
+            if ok and msg ~= "queued" then ed.ref = ns.Fresh({ kind = "game", scope = ed.ref.scope == "account" and "char" or "account", name = ed.ref.name }) end
+            Say(ok, msg)
+        end, desc = "A moved macro is a new macro: put it on your bars again." },
+        { label = "Delete", width = 90, confirm = true, onClick = function()
+            if not ed.ref then return end
+            local ok, msg
+            if ed.ref.kind == "ext" then ok, msg = ns.DeleteExt(ed.ref) else ok, msg = ns.DeleteGame(ed.ref) end
+            if ok and msg ~= "queued" then ed.ref = nil end
+            Say(ok, msg)
+        end },
+        refresh = function(row)
+            local b = row.buttons
+            b[3]:SetUsable(ed.ref ~= nil and (ed.ref.kind == "game" or ns.ExtBarMacro(ed.ref.id) ~= nil))
+            b[4]:SetText(ed.ref and ed.ref.kind == "game" and (ed.ref.scope == "account" and "Move to character" or "Move to account") or "Move")
+            b[4]:SetUsable(ed.ref ~= nil and ed.ref.kind == "game")
+            b[5]:SetUsable(ed.ref ~= nil)
+            b[2]:SetUsable(ed.ref ~= nil)
+        end,
+    })
+
+    -- extended: key binding and bar macro
+    UI.Note(stack, function()
+        if not ed.ref or ed.ref.kind ~= "ext" then return "" end
+        local key = ns.cdb.binds[ed.ref.id]
+        local bar = ns.ExtBarMacro(ed.ref.id)
+        return ("Key on this character: |cffffffff%s|r   Bar macro: |cffffffff%s|r"):format(key or "none", bar and bar.name or "none")
+    end)
+    local capture = CreateFrame("Frame", nil, UIParent)
+    capture:Hide()
+    capture:EnableKeyboard(true)
+    capture:SetFrameStrata("FULLSCREEN_DIALOG")
+    capture:SetScript("OnKeyDown", function(self, key)
+        if key == "LSHIFT" or key == "RSHIFT" or key == "LCTRL" or key == "RCTRL" or key == "LALT" or key == "RALT" then return end
+        self:Hide()
+        if key == "ESCAPE" then app:Print("key not changed.") return end
+        local combo = (IsAltKeyDown() and "ALT-" or "") .. (IsControlKeyDown() and "CTRL-" or "") .. (IsShiftKeyDown() and "SHIFT-" or "") .. key
+        if ed.ref and ed.ref.kind == "ext" then Say(ns.BindExt(ed.ref, combo)) end
+    end)
+    UI.ButtonRow(stack, {
+        { label = "Set key", width = 100, onClick = function()
+            if not ed.ref or ed.ref.kind ~= "ext" then return end
+            capture:Show()
+            app:Print("press the key (with Shift / Ctrl / Alt if you like) for " .. ed.ref.name .. "; Escape cancels.")
+        end, desc = "Runs this macro on this character. While set it overrides what the key normally does." },
+        { label = "Clear key", width = 100, onClick = function() if ed.ref and ed.ref.kind == "ext" then Say(ns.BindExt(ed.ref, nil)) end end },
+        { label = "Put on a bar", width = 130, onClick = function()
+            if not ed.ref or ed.ref.kind ~= "ext" then return end
+            local ok, msg, index = ns.ExtToBar(ed.ref)
+            if ok and index and PickupMacro then PickupMacro(index) end
+            Say(ok, msg)
+        end, desc = "Makes a one-line _mom macro that clicks this one (takes one slot) and puts it on your cursor." },
+        refresh = function(row)
+            local on = ed.ref ~= nil and ed.ref.kind == "ext"
+            for _, b in ipairs(row.buttons) do b:SetShown(on) end
+        end,
+    })
+
+    -- backups of this macro
+    UI.Header(stack, "Earlier versions", "Every save keeps the text it replaced (the last 10). Restore puts it in the editor; Save keeps it.")
+    UI.List(stack, {
+        items = function() return ns.History(ed.ref) end,
+        empty = "No earlier versions yet.",
+        title = function(h) return Date(h.t) end,
+        detail = function(h) return "|cff8d94a3" .. Esc(FirstLine(h.body)) .. "|r" end,
+        tooltip = function(h)
+            local t = { Date(h.t), " " }
+            for line in (h.body or ""):gmatch("[^\n]+") do t[#t + 1] = Esc(line) end
+            return t
+        end,
+        buttons = { { label = "Restore", width = 80, onClick = function(h)
+            ed.body, ed.icon = h.body, h.icon or ed.icon
+            if ns.editorBox then ns.editorBox:SetText(ed.body) end
+            app:Refresh()
+        end } },
+    })
+end)
+
+------------------------------------------------------------------------
+-- Backups: the bin, export and import
+------------------------------------------------------------------------
+local exportWhich, importAs = "mine", "same"
+app:Section("backups", "Backups", function(stack)
+    UI.Header(stack, "Deleted macros", "The last 20 macros deleted here. Restore makes them again (as an extended macro when there is no room).")
+    UI.List(stack, {
+        items = function() return ns.db.bin end,
+        rowHeight = 40,
+        empty = "Nothing deleted.",
+        icon = function(b) return b.icon or QM end,
+        title = function(b) return Esc(b.name) .. "  |cff8d94a3" .. (b.kind == "ext" and "extended" or b.scope == "account" and "account" or "character") .. "|r" end,
+        detail = function(b) return "|cff8d94a3" .. Date(b.t) .. "  -  " .. Esc(FirstLine(b.body)) .. "|r" end,
+        buttons = { { label = "Restore", width = 80, onClick = function(b)
+            local kind = b.kind == "ext" and "x" or (b.scope == "account" and "a" or "c")
+            if kind ~= "x" and not ns.Room(b.scope) then kind = "x" end
+            local ok, msg = ns.Import({ { kind = kind, icon = b.icon, name = b.name, body = b.body } })
+            if ok then for i, x in ipairs(ns.db.bin) do if x == b then table.remove(ns.db.bin, i) break end end end
+            Say(ok, msg)
+        end } },
+    })
+
+    UI.Header(stack, "Export", "A set of macros as text, to keep or to give to a friend. Click the text, Ctrl+A, Ctrl+C.")
+    UI.Dropdown(stack, {
+        label = "Which macros", width = 260,
+        items = { { value = "mine", text = "Made by /mom and extended" }, { value = "account", text = "Account macros" },
+            { value = "char", text = "This character's macros" }, { value = "ext", text = "Extended macros" }, { value = "all", text = "All of them" } },
+        get = function() return exportWhich end, set = function(v) exportWhich = v end,
+    })
+    local out = UI.TextArea(stack.parent, stack.width, 90)
+    stack:Add(out, 90)
+    ns.exportBox = out.box
+    UI.ButtonRow(stack, { { label = "Export", width = 120, style = "accent", onClick = function()
+        local refs = exportWhich == "all" and ns.List(nil) or ns.List(exportWhich)
+        if exportWhich == "all" then for _, r in ipairs(ns.List("ext")) do refs[#refs + 1] = r end end
+        out.box:SetText(ns.Export(refs))
+        out.box:SetFocus()
+        out.box:HighlightText()
+        app:Print(("exported %d macro%s."):format(#refs, #refs == 1 and "" or "s"))
+    end } })
+
+    UI.Header(stack, "Import", "Paste an export, choose where the macros go, Import. Nothing is replaced: a name that is taken gets a number.")
+    UI.Dropdown(stack, {
+        label = "Import as", width = 260,
+        items = { { value = "same", text = "As they were exported" }, { value = "x", text = "Extended macros (no slots)" },
+            { value = "c", text = "Character macros" }, { value = "a", text = "Account macros" } },
+        get = function() return importAs end, set = function(v) importAs = v end,
+    })
+    local inp = UI.TextArea(stack.parent, stack.width, 90)
+    stack:Add(inp, 90)
+    ns.importBox = inp.box
+    UI.ButtonRow(stack, { { label = "Import", width = 120, style = "accent", onClick = function()
+        local list, err = ns.ParseExport(inp.box:GetText())
+        if not list then Say(false, err) return end
+        local ok, msg = ns.Import(list, importAs ~= "same" and importAs or nil)
+        if ok then inp.box:SetText("") end
+        Say(ok, msg)
+    end } })
+end)
+
+app:Section("options", "Options", function(stack)
+    UI.Header(stack, "Options")
+    app:Widget(stack, "where")
+    app:Widget(stack, "autoselfcast")
+    UI.Note(stack, "Slots: the game allows " .. ns.MaxAccount() .. " account macros and " .. ns.MaxChar() .. " per character, 255 characters each; no addon can raise that. Extended macros live in /mom instead and need no slot.")
+end)
+
+------------------------------------------------------------------------
+-- Saved variables and login
+------------------------------------------------------------------------
+ns.OnLoad = function(db, cdb)
+    UI.Util.FillDefaults(db, ns.MANAGER_DEFAULTS)
+    UI.Util.FillDefaults(cdb, ns.MANAGER_CHAR_DEFAULTS)
+end
+ns.OnWorld = function() ns.SyncExt() end
+
+app:Command("new", "new [ext|account|char]", "open the editor on a new macro", function(rest)
+    local as = (rest or ""):match("^%s*(%a+)")
+    as = as == "ext" and "ext" or as == "account" and "account" or "char"
+    ns.EditNew(as)
+end)
