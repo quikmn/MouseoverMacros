@@ -140,9 +140,13 @@ local function MoveHistory(fromRef, toRef)
     if fs[fk] then ts[tk] = fs[fk]; fs[fk] = nil end
 end
 
+-- A deleted macro goes to the bin; its earlier versions go with it (the bin keeps the last text), so
+-- the history of deleted macros doesn't pile up in the saved variables.
 local function ToBin(ref)
     table.insert(DB().bin, 1, { t = Now(), kind = ref.kind, scope = ref.scope, name = ref.name, icon = ref.icon, body = ref.body })
     while #DB().bin > BIN do table.remove(DB().bin) end
+    local store, key = HistStore(ref)
+    store[key] = nil
 end
 
 ------------------------------------------------------------------------
@@ -168,7 +172,8 @@ local function ExactlyNow(what, fn)
     deferred = ns.Defer(what, function()
         result = { fn() }
         if deferred then
-            ns.app:Print(tostring(result[2]))
+            local ok, msg = result[1], tostring(result[2])
+            ns.app:Print((ok and "" or "|cffff6060") .. "after combat: " .. msg:gsub("|", "||") .. (ok and "" or "|r"))
             ns.app:Refresh()
         end
     end)
@@ -348,9 +353,15 @@ function ns.BindExt(ref, key)
         if key then
             for id, k in pairs(CDB().binds) do if k == key then CDB().binds[id] = nil end end
         end
+        -- what the key does in the game's own bindings, which this overrides while set (W: Move Forward)
+        local was = key and GetBindingAction and GetBindingAction(key)
+        local instead = ""
+        if type(was) == "string" and was ~= "" then
+            instead = " (instead of " .. (_G["BINDING_NAME_" .. was] or was) .. ", until you clear it)"
+        end
         CDB().binds[ref.id] = key
         ApplyBindings()
-        return true, key and (ref.name .. " runs on " .. key) or (ref.name .. ": key cleared")
+        return true, key and (ref.name .. " runs on " .. key .. instead) or (ref.name .. ": key cleared")
     end)
 end
 
@@ -560,6 +571,8 @@ function ns.MakeTemplate(t, asExt)
         local i, name = ns.Resolve(key)
         local body = t.body .. "\n#mom " .. key
         if i then
+            local _, _, old = GetMacroInfo(i)
+            if old and Trim(old) ~= Trim(body) then ns.PushHistory(ns.GameRef(i), old) end
             EditMacro(i, name, nil, body)
             return true, "updated " .. name
         end

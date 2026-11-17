@@ -5,8 +5,9 @@ local UI = LibStub("EverlookUI-1")
 local app = ns.app
 local QM = ns.QUESTION_MARK
 
+-- Messages carry macro names, which may hold a "|": escaped so chat shows them as typed.
 local function Say(ok, msg)
-    if msg and msg ~= "queued" then app:Print((ok and "" or "|cffff6060") .. msg .. (ok and "" or "|r")) end
+    if msg and msg ~= "queued" then app:Print((ok and "" or "|cffff6060") .. UI.Util.Escape(msg) .. (ok and "" or "|r")) end
     app:Refresh()
 end
 
@@ -253,8 +254,8 @@ end)
 local INSERTS = {
     { "#showtooltip", "#showtooltip\n" }, { "/cast", "/cast " }, { "/use", "/use " }, { "/stopcasting", "/stopcasting\n" },
     { "mouseover friend", "[@mouseover,help,nodead][help,nodead] " }, { "mouseover enemy", "[@mouseover,harm,nodead][harm,nodead] " },
-    { "mouseover any", "[@mouseover,exists,nodead][exists,nodead] " }, { "focus", "[@focus,exists,nodead] " },
-    { "shift", "[mod:shift] " }, { "ctrl", "[mod:ctrl] " }, { "alt", "[mod:alt] " }, { "dead", "[@mouseover,help,dead][help,dead] " },
+    { "mouseover any", "[@mouseover,exists,nodead][exists,nodead] " }, { "mouseover dead", "[@mouseover,help,dead][help,dead] " },
+    { "focus", "[@focus,exists,nodead] " }, { "shift", "[mod:shift] " }, { "ctrl", "[mod:ctrl] " }, { "alt", "[mod:alt] " },
 }
 
 local ICON_COLS, ICON_ROWS, ICON_SIZE = 16, 4, 30
@@ -266,8 +267,10 @@ app:Section("edit", "Edit", function(stack)
             return ("|cffffffff%s|r  -  %s%s"):format(Esc(ed.ref.name), ns.Cost(ed.ref),
                 ed.ref.kind == "game" and not ed.ref.ours and "  |cff8d94a3(yours: /mom only changes it when you save it here)|r" or "")
         end
+        local full = ed.as ~= "ext" and not ns.Room(ed.as)
         return "|cffffffffNew " .. (ed.as == "ext" and "extended" or ed.as == "account" and "account" or "character") .. " macro|r  -  " ..
-            (ed.as == "ext" and "no slot" or "takes one " .. (ed.as == "account" and "account" or "character") .. " slot")
+            (ed.as == "ext" and "no slot" or "takes one " .. (ed.as == "account" and "account" or "character") .. " slot") ..
+            (full and "  |cffff8a8a(all used: choose another kind below, or Extended, which needs no slot)|r" or "")
     end)
     UI.Dropdown(stack, {
         label = "Kind (new macros)", width = 260,
@@ -373,13 +376,14 @@ app:Section("edit", "Edit", function(stack)
         stack:RefreshAll()
     end
     ns.EditorInsert = Insert
-    local rows = { {}, {} }
+    -- three rows of four: the page is 625 px wide (two rows of six ran past the window's edge)
+    local rows = { {}, {}, {} }
     for i, d in ipairs(INSERTS) do
-        local row = rows[i <= 6 and 1 or 2]
-        row[#row + 1] = { label = d[1], width = i <= 4 and 96 or 116, onClick = function() Insert(d[2]) end, desc = "Inserts " .. d[2]:gsub("\n", "") }
+        local r = math.floor((i - 1) / 4) + 1
+        local row = rows[r]
+        row[#row + 1] = { label = d[1], width = r == 2 and 124 or 96, onClick = function() Insert(d[2]) end, desc = "Inserts " .. (d[2]:gsub("\n", "")) }
     end
-    UI.ButtonRow(stack, rows[1])
-    UI.ButtonRow(stack, rows[2])
+    for _, row in ipairs(rows) do UI.ButtonRow(stack, row) end
 
     UI.ButtonRow(stack, {
         { label = "Save", width = 90, style = "accent", onClick = function() ns.EditorSave() end },
@@ -394,9 +398,10 @@ app:Section("edit", "Edit", function(stack)
         { label = "Delete", width = 90, confirm = true, onClick = function()
             if not ed.ref then return end
             local ok, msg
+            local kind = ed.ref.kind == "ext" and "ext" or ed.ref.scope
             if ed.ref.kind == "ext" then ok, msg = ns.DeleteExt(ed.ref) else ok, msg = ns.DeleteGame(ed.ref) end
-            if ok and msg ~= "queued" then ed.ref = nil end
             Say(ok, msg)
+            if ok and msg ~= "queued" then ns.EditNew(kind) end
         end },
         refresh = function(row)
             local b = row.buttons
@@ -409,28 +414,37 @@ app:Section("edit", "Edit", function(stack)
     })
 
     -- extended: key binding and bar macro
+    local capture = CreateFrame("Frame", nil, UIParent)
     UI.Note(stack, function()
         if not ed.ref or ed.ref.kind ~= "ext" then return "" end
         local key = ns.cdb.binds[ed.ref.id]
         local bar = ns.ExtBarMacro(ed.ref.id)
         return ("Key on this character: |cffffffff%s|r   Bar macro: |cffffffff%s|r"):format(key or "none", bar and bar.name or "none")
+            .. (capture:IsShown() and "\n|cffffd27fPress the key now (with Shift / Ctrl / Alt if you like); Escape cancels.|r" or "")
     end)
-    local capture = CreateFrame("Frame", nil, UIParent)
     capture:Hide()
     capture:EnableKeyboard(true)
     capture:SetFrameStrata("FULLSCREEN_DIALOG")
     capture:SetScript("OnKeyDown", function(self, key)
         if key == "LSHIFT" or key == "RSHIFT" or key == "LCTRL" or key == "RCTRL" or key == "LALT" or key == "RALT" then return end
         self:Hide()
-        if key == "ESCAPE" then app:Print("key not changed.") return end
+        if key == "ESCAPE" then app:Print("key not changed."); app:Refresh() return end
         local combo = (IsAltKeyDown() and "ALT-" or "") .. (IsControlKeyDown() and "CTRL-" or "") .. (IsShiftKeyDown() and "SHIFT-" or "") .. key
-        if ed.ref and ed.ref.kind == "ext" then Say(ns.BindExt(ed.ref, combo)) end
+        if ed.ref and ed.ref.kind == "ext" then Say(ns.BindExt(ed.ref, combo)) else app:Refresh() end
     end)
+    -- closing the window or leaving the page cancels: a key pressed later (W to walk) must not be bound
+    local function cancelCapture()
+        if capture:IsShown() then capture:Hide(); app:Print("key not changed.") end
+    end
+    stack.parent:HookScript("OnHide", cancelCapture)
+    if app.window then app.window:HookScript("OnHide", cancelCapture) end
+    ns.keyCapture = capture
     UI.ButtonRow(stack, {
         { label = "Set key", width = 100, onClick = function()
             if not ed.ref or ed.ref.kind ~= "ext" then return end
             capture:Show()
-            app:Print("press the key (with Shift / Ctrl / Alt if you like) for " .. ed.ref.name .. "; Escape cancels.")
+            app:Print("press the key (with Shift / Ctrl / Alt if you like) for " .. Esc(ed.ref.name) .. "; Escape cancels.")
+            app:Refresh()
         end, desc = "Runs this macro on this character. While set it overrides what the key normally does." },
         { label = "Clear key", width = 100, onClick = function() if ed.ref and ed.ref.kind == "ext" then Say(ns.BindExt(ed.ref, nil)) end end },
         { label = "Put on a bar", width = 130, onClick = function()
@@ -481,9 +495,12 @@ app:Section("backups", "Backups", function(stack)
         buttons = { { label = "Restore", width = 80, onClick = function(b)
             local kind = b.kind == "ext" and "x" or (b.scope == "account" and "a" or "c")
             if kind ~= "x" and not ns.Room(b.scope) then kind = "x" end
-            local ok, msg = ns.Import({ { kind = kind, icon = b.icon, name = b.name, body = b.body } })
-            if ok then for i, x in ipairs(ns.db.bin) do if x == b then table.remove(ns.db.bin, i) break end end end
-            Say(ok, msg)
+            local function restore()
+                local ok, msg = ns.Import({ { kind = kind, icon = b.icon, name = b.name, body = b.body } })
+                if ok then for i, x in ipairs(ns.db.bin) do if x == b then table.remove(ns.db.bin, i) break end end end
+                Say(ok, msg)
+            end
+            ns.Defer("restoring " .. b.name, restore)
         end } },
     })
 
@@ -497,7 +514,7 @@ app:Section("backups", "Backups", function(stack)
     local out = UI.TextArea(stack.parent, stack.width, 90)
     stack:Add(out, 90)
     ns.exportBox = out.box
-    UI.ButtonRow(stack, { { label = "Export", width = 120, style = "accent", onClick = function()
+    UI.ButtonRow(stack, { { label = "Export", width = 120, onClick = function()
         local refs = exportWhich == "all" and ns.List(nil) or ns.List(exportWhich)
         if exportWhich == "all" then for _, r in ipairs(ns.List("ext")) do refs[#refs + 1] = r end end
         out.box:SetText(ns.Export(refs))

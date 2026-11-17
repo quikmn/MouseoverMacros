@@ -553,6 +553,76 @@ step("slot limits come from Constants.MacroConsts (30 character macros on this c
 	check(ns.MaxChar() == 18, "falls back to the global")
 end)
 
+step("every button row on every page fits the page width", function()
+	for _, id in ipairs(ns.app.order) do
+		ns.app:Open(id)
+		local st = ns.app.sections[id].stack
+		for _, e in ipairs(st.entries) do
+			local f = e.frame
+			if f and f.buttons and not f.rows then
+				local w = 0
+				for i, b in ipairs(f.buttons) do w = w + b:GetWidth() + (i > 1 and 8 or 0) end
+				check(w <= st.width, ("%s: a row of buttons is %d px on a %d px page"):format(id, w, st.width))
+			end
+		end
+	end
+	ns.app:Close()
+end)
+
+step("Set key: closing the window cancels it, so a later key press is not bound", function()
+	local _, _, id = ns.CreateExt("KeyTest", nil, "/say key")
+	ns.Edit(ns.ExtRef(id))
+	ns.keyCapture:Show()
+	ns.app:Close()
+	check(not ns.keyCapture:IsShown(), "capture still armed after closing the window")
+	check(not MouseoverMacrosCharDB.binds[id], "bound")
+	-- a key already in use says what it replaces
+	GetBindingAction = function(k) if k == "W" then return "MOVEFORWARD" end return "" end
+	BINDING_NAME_MOVEFORWARD = "Move Forward"
+	local ok, msg = ns.BindExt(ns.ExtRef(id), "W")
+	check(ok and msg:find("instead of Move Forward", 1, true), "bind reply: " .. tostring(msg))
+	ok, msg = ns.BindExt(ns.ExtRef(id), "F9")
+	check(ok and not msg:find("instead", 1, true), "free key reply: " .. tostring(msg))
+	GetBindingAction, BINDING_NAME_MOVEFORWARD = nil, nil
+	ns.DeleteExt(ns.ExtRef(id))
+end)
+
+step("delete in the editor: a fresh editor of the same kind; the macro's history goes with it", function()
+	local _, _, id = ns.CreateExt("DelMe", nil, "/say one")
+	ns.SaveExt(ns.ExtRef(id), "DelMe", nil, "/say two")
+	check(#ns.History(ns.ExtRef(id)) == 1, "history")
+	ns.Edit(ns.ExtRef(id))
+	local row
+	for _, w in ipairs(ns.app.sections.edit.stack.widgets) do
+		if w.buttons and #w.buttons == 5 then row = w end
+	end
+	row.buttons[5]:GetScript("OnClick")(row.buttons[5])
+	row.buttons[5]:GetScript("OnClick")(row.buttons[5])
+	check(not MouseoverMacrosDB.ext[id], "not deleted")
+	check(ns.ed.ref == nil and ns.ed.as == "ext" and ns.ed.body == "#showtooltip\n" and ns.ed.name == "", "editor kept the deleted text")
+	check(MouseoverMacrosDB.history["x" .. id] == nil, "history of a deleted macro kept")
+	ns.app:Close()
+end)
+
+step("restore from the bin in combat: waits, then restores and leaves the bin", function()
+	local _, _, id = ns.CreateExt("BinMe", nil, "/say bin")
+	ns.DeleteExt(ns.ExtRef(id))
+	check(MouseoverMacrosDB.bin[1].name == "BinMe", "in the bin")
+	ns.app:Open("backups")
+	local list
+	for _, w in ipairs(ns.app.sections.backups.stack.widgets) do if w.rows and not list then list = w end end
+	MOCK.combat = true
+	list.rows[1].buttons[1]:GetScript("OnClick")(list.rows[1].buttons[1])
+	check(MouseoverMacrosDB.bin[1].name == "BinMe", "left the bin in combat")
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	check(MouseoverMacrosDB.bin[1] == nil or MouseoverMacrosDB.bin[1].name ~= "BinMe", "still in the bin after combat")
+	local found
+	for _, r in ipairs(ns.List("ext")) do if r.name == "BinMe" then found = true end end
+	check(found, "not restored after combat")
+	ns.app:Close()
+end)
+
 step("the player's macros were never changed", function()
 	check(find("fort").body == PLAYER_FORT and find("Mount2").body == "/cast Riding Turtle", "changed") -- Mount2: renamed by the player in the editor
 	check(find("smite").body == "#showtooltip Smite\n/cast Smite", "smite changed")

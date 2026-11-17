@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Character macros: /mom now counts the client's real limit (30 per character on this client; it read 18 before, so it said "full" too early and put macros in account slots).
+- Editor: the quick-insert buttons are three rows of four, so none runs past the window's edge ("dead" is now "mouseover dead").
+- Set key: closing the window or leaving the page cancels it, so a key pressed later (W to walk) is no longer bound by surprise. The window says while it waits for a key, and the reply says what the key did before ("instead of Move Forward").
+- Delete in the editor: the editor starts a new macro of the same kind instead of keeping the deleted text under "New ...". A deleted macro's earlier versions go with it (the bin keeps its last text).
+- Restore from the bin in combat: waits for combat to end, then restores and takes it out of the bin (it stayed in the bin before).
+- Updating a template macro keeps the text it replaced under Earlier versions, like every other save.
+- Backups: Import is the page's one highlighted button; Export is plain.
+- New macro: the editor says when that kind's slots are all used, before you type it.
+- Chat replies show macro names with a "|" as typed; a change made after combat says "after combat:" and shows failures in red.
 - New macros: Shadow Word: Death, and the group buffs Prayer of Fortitude, Prayer of Spirit and Prayer of Shadow Protection (they show as not learned until you have them).
 
 - A macro window: Mine, Account, Character, Extended, Templates, Edit, Backups and Options in the sidebar. Search, slot counters, and an editor for any macro (yours too: /mom only limits what it changes on its own) with an icon picker, a live character count, a check that spell and item names exist, quick inserts for conditionals, Save as copy, Move to account / character (when there is room), Delete (click twice) and Pick up.
