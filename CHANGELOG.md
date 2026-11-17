@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Macro lists: an empty list says how to make the first one. A game macro that is too long says an extended macro takes up to 1023 characters.
 - Character macros: /mom now counts the client's real limit (30 per character on this client; it read 18 before, so it said "full" too early and put macros in account slots).
 - Editor: the quick-insert buttons are three rows of four, so none runs past the window's edge ("dead" is now "mouseover dead").
 - Set key: closing the window or leaving the page cancels it, so a key pressed later (W to walk) is no longer bound by surprise. The window says while it waits for a key, and the reply says what the key did before ("instead of Move Forward").

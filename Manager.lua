@@ -162,7 +162,9 @@ ns.Room = Room
 local function CheckText(name, body, limit)
     if Trim(name) == "" then return "a macro needs a name" end
     if limit == MAX_BODY and #name > MAX_NAME then return "names are at most " .. MAX_NAME .. " characters" end
-    if #body > limit then return ("too long: %d of %d characters"):format(#body, limit) end
+    if #body > limit then
+        return ("too long: %d of %d characters%s"):format(#body, limit, limit == MAX_BODY and " (an extended macro takes up to " .. MAX_EXT .. ")" or "")
+    end
 end
 
 -- Macros can't be changed in combat: then it is queued (ns.Defer says so), returns true, "queued",
