@@ -29,23 +29,50 @@ local function Esc(s) return UI.Util.Escape(s or "") end
 -- The editor's state
 ------------------------------------------------------------------------
 -- ed.ref: the macro being edited (nil: a new one); ed.as: for a new one, "char", "account" or "ext".
+-- ed.base: what the editor held when it was opened or last saved (unsaved changes are measured against it).
+-- ed.pending: a save waiting for combat to end; ed.status: how the last save after combat went.
 local ed = { name = "", icon = QM, body = "", as = "char" }
 ns.ed = ed
 
-function ns.Edit(ref)
+local function Snapshot() ed.base = { name = ed.name, icon = ed.icon, body = ed.body, as = ed.as } end
+Snapshot()
+
+-- Unsaved changes: the name, icon or text, or (a new macro) its kind. A save waiting for combat is a
+-- save already chosen (it saves the latest text), so it doesn't count.
+local function Dirty()
+    if ed.pending then return false end
+    local b = ed.base
+    return ed.name ~= b.name or ed.icon ~= b.icon or ed.body ~= b.body or (ed.ref == nil and ed.as ~= b.as)
+end
+ns.EditorDirty = Dirty
+
+local function Values() return { ref = ed.ref, as = ed.as, name = ns.Trim(ed.name), icon = ed.icon, body = ed.body } end
+
+-- Leaving a macro whose save waits for combat: that save keeps the text as it is now.
+local function Detach()
+    local p = ed.pending
+    if p then p.values, p.live, ed.pending = Values(), false, nil end
+    ed.status = nil
+end
+
+local function OpenRef(ref)
+    Detach()
     ref = ns.Fresh(ref) or ref
     ed.ref = ref
     ed.name, ed.icon, ed.body = ref.name, ref.icon or QM, ref.body or ""
     ed.picking = false
+    Snapshot()
     app:Open("edit")
     app:Refresh()
 end
 
-function ns.EditNew(as)
+local function OpenNew(as)
+    Detach()
     ed.ref = nil
     ed.as = as or "char"
     ed.name, ed.icon, ed.body = "", QM, "#showtooltip\n"
     ed.picking = false
+    Snapshot()
     app:Open("edit")
     app:Refresh()
 end
@@ -53,34 +80,202 @@ end
 local function EdKind() return ed.ref and ed.ref.kind or (ed.as == "ext" and "ext" or "game") end
 local function EdLimit() return EdKind() == "ext" and ns.MAX_EXT or ns.MAX_BODY end
 
--- Save what is in the editor. Returns ok, message.
-function ns.EditorSave(asCopy)
-    local ok, msg, id
-    local name, icon, body = ns.Trim(ed.name), ed.icon, ed.body
-    if ed.ref and not asCopy then
-        if ed.ref.kind == "ext" then
-            ok, msg = ns.SaveExt(ed.ref, name, icon, body)
-            ed.ref = ns.ExtRef(ed.ref.id) or ed.ref
+-- Save v ({ ref, as, name, icon, body }) now (out of combat). Returns ok, message, the saved macro.
+local function SaveNow(v, asCopy)
+    local ok, msg, id, ref
+    local name, icon, body = v.name, v.icon, v.body
+    if v.ref and not asCopy then
+        if v.ref.kind == "ext" then
+            ok, msg = ns.SaveExt(v.ref, name, icon, body)
+            if ok then ref = ns.ExtRef(v.ref.id) end
         else
-            ok, msg = ns.SaveGame(ed.ref, name, icon, body)
-            if ok and msg ~= "queued" then ed.ref = ns.Fresh({ kind = "game", scope = ed.ref.scope, name = name }) or ed.ref end
+            ok, msg = ns.SaveGame(v.ref, name, icon, body)
+            if ok then ref = ns.Fresh({ kind = "game", scope = v.ref.scope, name = name }) end
         end
     else
-        local as = ed.ref and (ed.ref.kind == "ext" and "ext" or ed.ref.scope) or ed.as
-        if asCopy and ed.ref and as ~= "ext" and ns.EachMacro(as, function(_, n) return n == name end) then
+        local as = v.ref and (v.ref.kind == "ext" and "ext" or v.ref.scope) or v.as
+        if asCopy and v.ref and as ~= "ext" and ns.EachMacro(as, function(_, n) return n == name end) then
             name = name:sub(1, ns.MAX_NAME - 2) .. " 2"
         end
         if as == "ext" then
             ok, msg, id = ns.CreateExt(name, icon, body)
-            if ok and id then ed.ref = ns.ExtRef(id) end
+            if ok and id then ref = ns.ExtRef(id) end
         else
             ok, msg = ns.CreateGame(as, name, icon, body)
-            if ok and msg ~= "queued" then ed.ref = ns.Fresh({ kind = "game", scope = as, name = name }) end
+            if ok then ref = ns.Fresh({ kind = "game", scope = as, name = name }) end
         end
-        if ed.ref then ed.name = ed.ref.name end
     end
+    return ok, msg, ref
+end
+
+-- The editor now holds the saved macro: no longer "New ...", and nothing unsaved.
+local function Saved(ref)
+    if ref then ed.ref = ref; ed.name = ref.name end
+    Snapshot()
+end
+
+-- A save that waited for combat: it saves what the editor holds now (or held when the player left it).
+local function FinishPending(p)
+    local v = p.live and Values() or p.values
+    if p.live then ed.pending = nil end
+    local ok, msg, ref = SaveNow(v, p.asCopy)
+    app:Print((ok and "" or "|cffff6060") .. "after combat: " .. Esc(msg) .. (ok and "" or "|r"))
+    if p.live then
+        if ok then
+            Saved(ref)
+            ed.status = { ok = true, text = "Saved after combat." }
+        else
+            ed.status = { ok = false, text = "Not saved after combat: " .. tostring(msg) .. ". Your text is still here." }
+        end
+    end
+    app:Refresh()
+end
+
+-- Save what is in the editor. Returns ok, message ("queued": it saves when combat ends).
+function ns.EditorSave(asCopy)
+    if ed.pending then return true, "queued" end -- one save at a time: the waiting one takes the latest text
+    local v = Values()
+    ed.status = nil
+    if InCombatLockdown() then
+        local err = ns.CheckText(v.name, v.body, EdLimit())
+        if err then Say(false, err) return false, err end
+        local p = { live = true, asCopy = asCopy }
+        ed.pending = p
+        ns.Defer("saving " .. Esc(v.name), function() FinishPending(p) end)
+        app:Refresh()
+        return true, "queued"
+    end
+    local ok, msg, ref = SaveNow(v, asCopy)
+    if ok then Saved(ref) end
     Say(ok, msg)
     return ok, msg
+end
+
+-- Back to what was saved.
+local function Revert()
+    local b = ed.base
+    ed.name, ed.icon, ed.body, ed.as = b.name, b.icon, b.body, b.as
+    ed.picking = false
+    if ns.editorBox then ns.editorBox:ClearFocus(); ns.editorBox:SetText(ed.body) end
+    app:Refresh()
+end
+
+------------------------------------------------------------------------
+-- Unsaved changes: ask Save / Discard / Cancel before they would be lost. Our own small window, not
+-- a StaticPopup (an addon's entry in StaticPopupDialogs taints Blizzard's dialogs).
+------------------------------------------------------------------------
+local dialog
+local function Dialog()
+    if dialog then return dialog end
+    local T = app.T
+    local d = CreateFrame("Frame", nil, UIParent)
+    d.eluiTheme = T
+    d:SetSize(420, 116)
+    d:SetFrameStrata("FULLSCREEN_DIALOG")
+    d:SetToplevel(true)
+    d:SetClampedToScreen(true)
+    d:EnableMouse(true)
+    d:Hide()
+    UI.Util.Solid(d, "BACKGROUND", unpack(T.bg)):SetAllPoints()
+    UI.Util.Border(d, 1, unpack(T.border))
+    d.text = UI.Text(d, T.font, T.text)
+    d.text:SetPoint("TOPLEFT", 18, -18)
+    d.text:SetPoint("TOPRIGHT", -18, -18)
+    d.text:SetJustifyH("CENTER")
+    local function choose(what)
+        local go = d.proceed
+        d.proceed = nil
+        d:Hide()
+        if what == "save" then
+            if ns.EditorSave() and go then go() end -- a failed save stays in the editor (the reason is in chat)
+        elseif what == "discard" then
+            Revert()
+            if go then go() end
+        end
+    end
+    d.save = UI.Button(d, "Save", function() choose("save") end, 110, "accent")
+    d.discard = UI.Button(d, "Discard", function() choose("discard") end, 110)
+    d.cancel = UI.Button(d, "Cancel", function() choose() end, 110)
+    d.discard:SetPoint("BOTTOM", 0, 16)
+    d.save:SetPoint("RIGHT", d.discard, "LEFT", -8, 0)
+    d.cancel:SetPoint("LEFT", d.discard, "RIGHT", 8, 0)
+    UI.Tooltip(d.discard, "Discard", "Throws away the changes and goes on.")
+    UI.Tooltip(d.cancel, "Cancel", "Stays in the editor with your changes.")
+    -- while it asks, the window behind takes no clicks
+    d:SetScript("OnShow", function()
+        local w = app.window
+        if not w then return end
+        if not d.blocker then
+            d.blocker = CreateFrame("Button", nil, w)
+            d.blocker:SetAllPoints()
+            d.blocker:EnableMouse(true)
+            UI.Util.Solid(d.blocker, "OVERLAY", 0, 0, 0, 0.35):SetAllPoints()
+        end
+        d.blocker:SetFrameLevel(w:GetFrameLevel() + 100)
+        d.blocker:Show()
+    end)
+    d:SetScript("OnHide", function()
+        d.proceed = nil -- Escape: the same as Cancel
+        if d.blocker then d.blocker:Hide() end
+    end)
+    UI.CloseOnEscape(d)
+    dialog = d
+    ns.unsavedDialog = d
+    return d
+end
+
+-- Run proceed() now, or (with unsaved changes) after the player chose Save or Discard.
+function ns.Guard(proceed)
+    if not Dirty() then return proceed() end
+    local d = Dialog()
+    d.proceed = proceed
+    d.text:SetText((ed.ref and ("You changed |cffffffff" .. Esc(ed.ref.name) .. "|r and didn't save it.")
+        or "Your new macro isn't saved yet.") .. "\nSave it first?")
+    d:ClearAllPoints()
+    if app.window and app.window:IsShown() then d:SetPoint("CENTER", app.window, "CENTER") else d:SetPoint("CENTER", UIParent, "CENTER", 0, 120) end
+    d:Show()
+end
+
+local function SameAsEditor(ref)
+    local cur = ed.ref
+    if not ref or not cur or ref.kind ~= cur.kind then return false end
+    if ref.kind == "ext" then return ref.id == cur.id end
+    return ref.scope == cur.scope and ref.name == cur.name
+end
+
+function ns.Edit(ref)
+    -- the macro already in the editor, with changes or a save waiting: just show it
+    if SameAsEditor(ref) and (Dirty() or ed.pending) then app:Open("edit") return end
+    ns.Guard(function() OpenRef(ref) end)
+end
+
+function ns.EditNew(as) ns.Guard(function() OpenNew(as) end) end
+
+-- Leaving the editor page and closing the window ask first too (sidebar, x, Escape, /mom).
+local baseShowSection, baseClose, baseCreateWindow = app.ShowSection, app.Close, app.CreateWindow
+function app:ShowSection(id)
+    if self.current == "edit" and id ~= "edit" and self:IsShown() and Dirty() then
+        return ns.Guard(function() baseShowSection(self, id) end)
+    end
+    return baseShowSection(self, id)
+end
+function app:Close()
+    if self:IsShown() and Dirty() then return ns.Guard(function() baseClose(self) end) end
+    return baseClose(self)
+end
+function app:CreateWindow()
+    local f = baseCreateWindow(self)
+    f.close:SetScript("OnClick", function() app:Close() end)
+    local onKey = f:GetScript("OnKeyDown")
+    f:SetScript("OnKeyDown", function(frame, key)
+        if key == "ESCAPE" and Dirty() and not UI.IsPopupShown() then
+            if not InCombatLockdown() then frame:SetPropagateKeyboardInput(false) end
+            app:Close()
+            return
+        end
+        if onKey then onKey(frame, key) end
+    end)
+    return f
 end
 
 ------------------------------------------------------------------------
@@ -392,9 +587,9 @@ app:Section("edit", "Edit", function(stack)
     end
     for _, row in ipairs(rows) do UI.ButtonRow(stack, row) end
 
-    UI.ButtonRow(stack, {
-        { label = "Save", width = 90, style = "accent", onClick = function() ns.EditorSave() end },
-        { label = "Save as copy", width = 120, onClick = function() ns.EditorSave(true) end },
+    local saveRow = UI.ButtonRow(stack, {
+        { label = "Save", width = 90, style = "accent", onClick = function() if not ed.pending then ns.EditorSave() end end },
+        { label = "Save as copy", width = 120, onClick = function() if not ed.pending and ed.ref then ns.EditorSave(true) end end },
         { label = "Pick up", width = 80, onClick = function() if ed.ref then PickUp(ed.ref) end end },
         { label = "Move", width = 170, onClick = function()
             if not ed.ref or ed.ref.kind ~= "game" then return end
@@ -408,17 +603,38 @@ app:Section("edit", "Edit", function(stack)
             local kind = ed.ref.kind == "ext" and "ext" or ed.ref.scope
             if ed.ref.kind == "ext" then ok, msg = ns.DeleteExt(ed.ref) else ok, msg = ns.DeleteGame(ed.ref) end
             Say(ok, msg)
-            if ok and msg ~= "queued" then ns.EditNew(kind) end
+            if ok and msg ~= "queued" then OpenNew(kind) end
         end },
         refresh = function(row)
             local b = row.buttons
+            -- a save waiting for combat: Save and Save as copy greyed out (their tooltip says why)
+            local waiting = ed.pending ~= nil
             b[3]:SetUsable(ed.ref ~= nil and (ed.ref.kind == "game" or ns.ExtBarMacro(ed.ref.id) ~= nil))
             b[4]:SetText(ed.ref and ed.ref.kind == "game" and (ed.ref.scope == "account" and "Move to character" or "Move to account") or "Move")
             b[4]:SetUsable(ed.ref ~= nil and ed.ref.kind == "game")
             b[5]:SetUsable(ed.ref ~= nil)
             b[2]:SetUsable(ed.ref ~= nil)
+            b[1]:SetUsable(true)
+            if waiting then b[1]:SetAlpha(0.4); b[2]:SetAlpha(0.4) end
         end,
     })
+    for i = 1, 2 do
+        local b = saveRow.buttons[i]
+        b:HookScript("OnEnter", function(self)
+            if not ed.pending then return end
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine("Waiting for combat to end", 1, 1, 1)
+            GameTooltip:Show()
+        end)
+        b:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+    ns.saveRow = saveRow
+    UI.Note(stack, function()
+        if ed.pending then return "|cffffd27fWill save when combat ends.|r" end
+        local s = ed.status
+        if not s then return "" end
+        return (s.ok and "|cff62cf88" or "|cffff6060") .. Esc(s.text) .. "|r"
+    end)
 
     -- extended: key binding and bar macro
     -- a modifier on its own is not a key to bind (the Windows key neither: it opens the Start menu)

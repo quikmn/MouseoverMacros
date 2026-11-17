@@ -63,6 +63,13 @@ time = time or function() return 1700000000 end
 local function find(name) for _, m in pairs(all()) do if m.name == name then return m end end end
 local function isMom(n) return n and n:match("^_mom%d%d%d%d$") ~= nil end
 local function entry(key) return ns.Find(key) end
+-- Answer the editor's "not saved" question: "save", "discard" or "cancel".
+local function answer(what)
+	local d = ns.unsavedDialog
+	check(d and d:IsShown(), "the unsaved-changes question is not shown")
+	local b = d[what]
+	b:GetScript("OnClick")(b)
+end
 
 -- The owner's macros before this version: old /mom macros under plain names, plus his own ones.
 local OLD_HEAL = "#showtooltip Heal\n/cast [@mouseover,help,nodead][help,nodead] Heal"
@@ -406,7 +413,8 @@ step("editor: the player's own macro can be edited here; limits; history and res
 end)
 
 step("a new macro from the editor: character, account, extended", function()
-	ns.EditNew("account")
+	ns.EditNew("account") -- the insert above is not saved: it asks
+	answer("discard")
 	ns.ed.name, ns.ed.body = "Hearth", "/use Hearthstone"
 	check(ns.EditorSave() and ns.ed.ref and ns.ed.ref.scope == "account", "account macro")
 	ns.EditNew("char")
@@ -414,6 +422,7 @@ step("a new macro from the editor: character, account, extended", function()
 	local ok, msg = ns.EditorSave()
 	check(not ok and msg:find("character macros are full", 1, true), "full character reply: " .. tostring(msg))
 	ns.EditNew("ext")
+	answer("discard") -- CharOne could not be saved: it asks before dropping it
 	ns.ed.name, ns.ed.body = "ExtOne", "/say hi"
 	check(ns.EditorSave() and ns.ed.ref.kind == "ext", "extended")
 	check(ns.EditorSave(true) and ns.ed.ref.kind == "ext" and #ns.List("ext") == 3, "save as copy")
@@ -517,7 +526,10 @@ step("icon search: ? first, file names and IDs", function()
 	check(ns.picker:IsShown(), "picker shown")
 	ns.picker.cells[2]:GetScript("OnClick")(ns.picker.cells[2])
 	check(ns.ed.icon == 135953 and not ns.ed.picking, "pick an icon")
-	ns.app:Close()
+	ns.app:Close() -- a new icon is a change: closing asks
+	check(ns.app:IsShown(), "closed with an unsaved icon")
+	answer("discard")
+	check(not ns.app:IsShown() and ns.ed.icon == 134400, "discard did not close and revert")
 end)
 
 step("extended macros come back after a reload: buttons and bindings", function()
@@ -649,6 +661,128 @@ step("restore from the bin in combat: waits, then restores and leaves the bin", 
 	local found
 	for _, r in ipairs(ns.List("ext")) do if r.name == "BinMe" then found = true end end
 	check(found, "not restored after combat")
+	ns.app:Close()
+end)
+
+local function extNamed(name)
+	local out = {}
+	for _, r in ipairs(ns.List("ext")) do if r.name == name then out[#out + 1] = r end end
+	return out
+end
+
+step("unsaved changes: another macro, New, another page, x, Escape and /mom ask Save / Discard / Cancel", function()
+	local _, _, other = ns.CreateExt("Other", nil, "/say other")
+	ns.EditNew("ext")
+	check(not (ns.unsavedDialog and ns.unsavedDialog:IsShown()), "asked with nothing changed")
+	ns.ed.name, ns.ed.body = "Guarded", "/say guarded"
+	-- Cancel keeps everything as it was, whichever way the player tried to leave
+	local w = ns.app.window
+	for _, leave in ipairs({
+		function() ns.Edit(ns.ExtRef(other)) end,
+		function() ns.EditNew("char") end,
+		function() ns.app:ShowSection("mine") end,
+		function() ns.app:Close() end,
+		function() w.close:GetScript("OnClick")(w.close) end,
+		function() w:GetScript("OnKeyDown")(w, "ESCAPE") end,
+		function() SlashCmdList.MOUSEOVERMACROS("") end,
+	}) do
+		leave()
+		answer("cancel")
+		check(ns.app:IsShown() and ns.app.current == "edit" and ns.ed.name == "Guarded" and ns.ed.ref == nil, "cancel lost the editor")
+	end
+	check(#extNamed("Guarded") == 0, "saved without being asked")
+	-- Save: saves, then goes on
+	ns.EditNew("char")
+	answer("save")
+	check(#extNamed("Guarded") == 1 and ns.ed.ref == nil and ns.ed.as == "char", "save then new")
+	-- Discard: back to what was saved, then goes on
+	ns.Edit(extNamed("Guarded")[1])
+	ns.ed.body = "/say changed"
+	ns.app:ShowSection("mine")
+	answer("discard")
+	check(ns.app.current == "mine" and extNamed("Guarded")[1].body == "/say guarded" and ns.ed.body == "/say guarded", "discard")
+	-- a save that fails stays in the editor
+	ns.EditNew("ext")
+	ns.ed.body = "/say no name"
+	ns.app:Close()
+	answer("save")
+	check(ns.app:IsShown() and ns.ed.body == "/say no name" and not ns.unsavedDialog:IsShown(), "failed save left the editor")
+	-- the same macro, changed: just shows it again
+	ns.Edit(extNamed("Guarded")[1])
+	answer("discard")
+	ns.ed.body = "/say again"
+	ns.app:ShowSection("ext")
+	answer("cancel")
+	ns.Edit(extNamed("Guarded")[1])
+	check(not ns.unsavedDialog:IsShown() and ns.ed.body == "/say again", "same macro asked or reloaded")
+	ns.app:Close()
+	answer("discard")
+	check(not ns.app:IsShown(), "not closed")
+	ns.DeleteExt(extNamed("Guarded")[1])
+	ns.DeleteExt(ns.ExtRef(other))
+	check(next(StaticPopupDialogs) == nil, "a StaticPopup was used")
+end)
+
+step("save in combat: waits once, saves the latest text after combat, never a duplicate", function()
+	ns.EditNew("ext")
+	ns.ed.name, ns.ed.body = "CombatSave", "/say one"
+	MOCK.combat = true
+	local jobs = #ns.queue.jobs
+	local ok, msg = ns.EditorSave()
+	check(ok and msg == "queued" and ns.ed.pending and #ns.queue.jobs == jobs + 1, "not queued")
+	check(last():find("in combat", 1, true), "combat reply: " .. last())
+	local save, copy = ns.saveRow.buttons[1], ns.saveRow.buttons[2]
+	check(save:GetAlpha() < 1 and copy:GetAlpha() < 1, "Save not greyed out")
+	save:GetScript("OnClick")(save)
+	ns.EditorSave()
+	check(#ns.queue.jobs == jobs + 1, "a second save was queued")
+	local status
+	for _, wd in ipairs(ns.app.sections.edit.stack.widgets) do
+		if wd.text and wd.text:GetText() and wd.text:GetText():find("Will save when combat ends", 1, true) then status = wd end
+	end
+	check(status, "no 'Will save when combat ends' line")
+	-- still editable; a queued save is not "unsaved": leaving doesn't ask
+	ns.ed.body = "/say two"
+	check(not ns.EditorDirty(), "a queued save counts as unsaved")
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	local made = extNamed("CombatSave")
+	check(#made == 1 and made[1].body == "/say two", "after combat: " .. #made .. " macros")
+	check(ns.ed.ref and ns.ed.ref.kind == "ext" and ns.ed.ref.name == "CombatSave" and not ns.ed.pending, "editor still on a new macro")
+	check(ns.ed.status and ns.ed.status.ok and ns.ed.status.text == "Saved after combat.", "status")
+	check(logHas("after combat: created extended macro CombatSave") and save:GetAlpha() == 1, "chat line / Save still grey")
+	check(not ns.EditorDirty(), "saved text counts as unsaved")
+	ns.DeleteExt(made[1])
+
+	-- it fails after combat: says so in red, the text stays
+	ns.EditNew("char")
+	ns.ed.name, ns.ed.body = "NoRoom", "/say three"
+	MOCK.combat = true
+	ns.EditorSave()
+	MOCK.combat = false
+	local create = CreateMacro
+	CreateMacro = function() return nil end
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	CreateMacro = create
+	check(ns.ed.status and not ns.ed.status.ok and ns.ed.status.text:find("Not saved after combat", 1, true), "failure status")
+	check(ns.ed.ref == nil and ns.ed.body == "/say three" and ns.EditorDirty(), "text lost after a failed save")
+	ns.app:Close()
+	answer("discard")
+
+	-- left for another macro while it waits: it still saves the text as it was left
+	ns.EditNew("ext")
+	ns.ed.name, ns.ed.body = "LeftBehind", "/say four"
+	MOCK.combat = true
+	ns.EditorSave()
+	ns.ed.body = "/say five"
+	ns.EditNew("ext")
+	check(not ns.unsavedDialog:IsShown() and ns.ed.ref == nil and ns.ed.name == "", "leaving a queued save asked")
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	made = extNamed("LeftBehind")
+	check(#made == 1 and made[1].body == "/say five", "left-behind save")
+	check(ns.ed.ref == nil and ns.ed.name == "", "the editor jumped to the saved macro")
+	ns.DeleteExt(made[1])
 	ns.app:Close()
 end)
 

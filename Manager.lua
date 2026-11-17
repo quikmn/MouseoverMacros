@@ -167,6 +167,8 @@ local function CheckText(name, body, limit)
     end
 end
 
+ns.CheckText = CheckText
+
 -- Macros can't be changed in combat: then it is queued (ns.Defer says so), returns true, "queued",
 -- and says how it went when it runs after combat.
 local function ExactlyNow(what, fn)

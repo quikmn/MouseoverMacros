@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Editor: changes you haven't saved are never dropped silently. Picking another macro, New, another page, or closing the window (x, Escape, /mom) asks: Save, Discard or Cancel.
+- Saving in combat: Save and Save as copy grey out and the editor says "Will save when combat ends". You can keep typing: the latest text is what gets saved, once (pressing Save again no longer makes a second macro). Afterwards the editor shows the saved macro and says "Saved after combat"; if it fails, it says why in red and your text stays.
 - Set key: clicking it again while it waits cancels (it no longer asks again in chat), and the button reads "Press a key..." while it waits. Shift, Ctrl, Alt and the Windows key on their own are no longer taken as the key.
 - The window's title reads "Mouseover Macros" (it was cut off as "MouseoverM..."). The icon button "? (follows the spell)" is now "Icon from the spell".
 - Extended macros fire when you press their key, not when you let go. The one-line bar macro now clicks on the press too; bar macros made by earlier versions are updated at login (out of combat).
