@@ -480,7 +480,11 @@ app:Section("edit", "Edit", function(stack)
     UI.Dropdown(stack, {
         label = "Kind (new macros)", width = 260,
         items = { { value = "char", text = "Character macro (255)" }, { value = "account", text = "Account macro (255)" }, { value = "ext", text = "Extended macro (1023, no slot)" } },
-        get = function() return ed.as end, set = function(v) ed.as = v end, after = function() app:Refresh() end,
+        -- an open macro shows its own kind; the choice only applies to new ones
+        get = function()
+            if ed.ref then return ed.ref.kind == "ext" and "ext" or ed.ref.scope == "account" and "account" or "char" end
+            return ed.as
+        end, set = function(v) ed.as = v end, after = function() app:Refresh() end,
         disabled = function() return ed.ref ~= nil end,
     })
     UI.Input(stack, {
@@ -683,6 +687,7 @@ app:Section("edit", "Edit", function(stack)
             if ok and index and PickupMacro then PickupMacro(index) end
             Say(ok, msg)
         end, desc = "Makes a one-line _mom macro that clicks this one (takes one slot) and puts it on your cursor." },
+        search = false, -- only means something with an extended macro open; never an empty search result
         refresh = function(row)
             local on = ed.ref ~= nil and ed.ref.kind == "ext"
             for _, b in ipairs(row.buttons) do b:SetShown(on) end
