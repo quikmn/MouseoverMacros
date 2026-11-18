@@ -274,7 +274,7 @@ step("install all: switched-off skipped, character first then account, nothing o
 	end
 	SlashCmdList.MOUSEOVERMACROS("on penance")
 	SlashCmdList.MOUSEOVERMACROS("all")
-	check(last():find("created 1, updated 23", 1, true), "second install: " .. last())
+	check(last():find("created 1, updated 24", 1, true), "second install: " .. last())
 	check(MouseoverMacrosDB.owned.penance and MouseoverMacrosDB.owned.penance.scope == "account", "account record when character is full")
 end)
 
