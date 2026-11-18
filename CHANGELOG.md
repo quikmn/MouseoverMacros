@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.0 (2026-11-19)
 
 - Settings: an AI help button copies a description of every setting for an AI assistant, and `/mom apply` runs the commands it gives back.
 - New priest macro: Abolish Disease (mouseover friend, else your friendly target).
