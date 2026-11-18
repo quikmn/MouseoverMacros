@@ -61,6 +61,7 @@ ns.MACROS = {
         { "swd",     "Shadow Word: Death", "harm" },
         { "dplague", "Devouring Plague", "harm" },
         { "shackle", "Shackle Undead", "harm" },
+        { "soothe",  "Mind Soothe", "harm" },
         { "rez",     "Resurrection", "res" },
     },
 }

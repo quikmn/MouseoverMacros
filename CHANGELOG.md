@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New priest macro: Mind Soothe (mouseover enemy, else your enemy target).
+
 - Chat commands now follow one pattern across all EverlookDB addons: `/mom help` (or `?`) lists them; `get` and `set <setting> <value>`; `/mom off ring` or `/mom on takeover` switch a setting (`/mom on <macro>` and `/mom off <macro>` work as before); `search <words>`; `status` and `version`; `/mom reset ring` (and `/mom ring reset`) asks first; a mistyped command suggests the nearest one.
 - The settings window has a search box at the top: type to find any setting.
 - The ring: hold the middle mouse button (or any key you pick), flick the mouse toward a slice and let go. Right: Consumables (the best food, drink, healing and mana potion and bandage in your bags, picked by required level and item level, plus your buffs). Left: Professions. Down: Fishing (Fishing, your "Fishing" equipment set or best pole, lures on the pole). Up: Hearthstone. A sub-ring opens its own ring: click a slice or press the key again toward it; Escape, a right click or letting go in the middle closes it. Works in combat (secure buttons; its contents update after combat, used-up items show greyed). Edit it on the new Ring page (drag spells, items, macros, mounts or equipment sets onto a direction, sub-rings, dynamic slices like "Best food") or with /mom ring. "Ring on" off gives the key back.
