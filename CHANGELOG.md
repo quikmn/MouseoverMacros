@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- New priest macro: Abolish Disease (mouseover friend, else your friendly target).
 - New priest macro: Mind Soothe (mouseover enemy, else your enemy target).
 
 - Chat commands now follow one pattern across all EverlookDB addons: `/mom help` (or `?`) lists them; `get` and `set <setting> <value>`; `/mom off ring` or `/mom on takeover` switch a setting (`/mom on <macro>` and `/mom off <macro>` work as before); `search <words>`; `status` and `version`; `/mom reset ring` (and `/mom ring reset`) asks first; a mistyped command suggests the nearest one.

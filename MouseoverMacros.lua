@@ -53,6 +53,7 @@ ns.MACROS = {
         { "psprot",  "Prayer of Shadow Protection", "help" },
         { "poh",     "Prayer of Healing", "helpOrSelf" },
         { "curedis", "Cure Disease", "help" },
+        { "abolish", "Abolish Disease", "help" },
         { "dispel",  "Dispel Magic", "any" },
         { "penance", "Penance", "any" },  -- heals a friend, hurts an enemy: mouseover, else target; never you
         { "swp",     "Shadow Word: Pain", "harm" },

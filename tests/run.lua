@@ -183,7 +183,7 @@ step("macro bodies: the old text plus a #mom marker line, all within 255", funct
 		for _, b in ipairs(ns.LEGACY.PRIEST[e.key] or { plain }) do if b == plain then found = true end end -- new macros have no old text
 		check(found, e.key .. " has no legacy body matching the current one")
 	end
-	check(n == 25, "25 priest macros, got " .. n)
+	check(n == 26, "26 priest macros, got " .. n)
 	-- a body with no room for the marker goes without it
 	local long = ns.Body({ "x", ("A"):rep(96), "help" })
 	check(not long:find("#mom", 1, true) and #long <= 255, "marker past 255")
@@ -266,7 +266,7 @@ step("install all: switched-off skipped, character first then account, nothing o
 	SlashCmdList.MOUSEOVERMACROS("install")
 	check(entry("penance").status == "new", "switched-off macro created")
 	check(#macros.char == 18, "character macros filled first: " .. #macros.char)
-	check(last():find("created 20, updated 4", 1, true) and last():find("1 switched off", 1, true), "summary: " .. last())
+	check(last():find("created 21, updated 4", 1, true) and last():find("1 switched off", 1, true), "summary: " .. last())
 	check(find("fort").body == PLAYER_FORT and find("smite").body == "#showtooltip Smite\n/cast Smite"
 		and find("_mom1234").body:find("player's", 1, true) and find("Mount"), "player's macros changed")
 	for _, e in ipairs(ns.Entries()) do
@@ -357,7 +357,7 @@ step("the window list: names, states, Create / Update / Pick up buttons", functi
 	ns.app:Open("templates")
 	local list
 	for _, w in ipairs(ns.app.sections.templates.stack.widgets) do if w.rows and not list then list = w end end
-	check(list and #list.rows == 25, "25 rows")
+	check(list and #list.rows == 26, "26 rows")
 	local smite, dplague
 	for _, r in ipairs(list.rows) do
 		if r.item.key == "smite" then smite = r end
@@ -608,7 +608,7 @@ step("help, list, settings and unknown commands", function()
 	end
 	MOCK.log = {}
 	SlashCmdList.MOUSEOVERMACROS("list")
-	check(#MOCK.log == 25, "list lines: " .. #MOCK.log)
+	check(#MOCK.log == 26, "list lines: " .. #MOCK.log)
 	check(table.concat(MOCK.log, "\n"):find("_mom", 1, true), "list shows names")
 	SlashCmdList.MOUSEOVERMACROS("settings")
 	SlashCmdList.MOUSEOVERMACROS("bogus")
