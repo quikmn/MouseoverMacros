@@ -61,3 +61,7 @@ Macros can't be changed in combat: anything you ask for then waits and happens w
 - Turns off the game's Auto Self Cast setting on every login.
 
 Classes covered so far: Priest.
+
+## License
+
+GPL-3.0 (see `LICENSE`). Written from scratch; it embeds LibStub (public domain) to load EverlookUI, the settings-window library shared by the EverlookDB addons.
