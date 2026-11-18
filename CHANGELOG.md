@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Settings: an AI help button copies a description of every setting for an AI assistant, and `/mom apply` runs the commands it gives back.
 - New priest macro: Abolish Disease (mouseover friend, else your friendly target).
 - New priest macro: Mind Soothe (mouseover enemy, else your enemy target).
 
