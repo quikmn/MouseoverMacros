@@ -268,8 +268,10 @@ function app:CreateWindow()
     f.close:SetScript("OnClick", function() app:Close() end)
     local onKey = f:GetScript("OnKeyDown")
     f:SetScript("OnKeyDown", function(frame, key)
-        if key == "ESCAPE" and Dirty() and not UI.IsPopupShown() then
-            if not InCombatLockdown() then frame:SetPropagateKeyboardInput(false) end
+        -- In combat the game gets Escape anyway (an addon can't keep it), so asking here would also open the Game
+        -- Menu: leave Escape to the game then (EverlookUI lets go of the keyboard when combat starts).
+        if key == "ESCAPE" and Dirty() and not UI.IsPopupShown() and not InCombatLockdown() then
+            frame:SetPropagateKeyboardInput(false)
             app:Close()
             return
         end
@@ -684,6 +686,14 @@ app:Section("edit", "Edit", function(stack)
     local function cancelCapture()
         if capture:IsShown() then capture:Hide(); app:Print("key not changed.") end
     end
+    -- combat starts while it waits: give the keyboard back at once (it would swallow every key in the fight)
+    capture:RegisterEvent("PLAYER_REGEN_DISABLED")
+    capture:SetScript("OnEvent", function(self)
+        if not self:IsShown() then return end
+        self:Hide()
+        app:Print("key not changed: combat started. Set it again after combat.")
+        app:Refresh()
+    end)
     stack.parent:HookScript("OnHide", cancelCapture)
     if app.window then app.window:HookScript("OnHide", cancelCapture) end
     ns.keyCapture = capture
@@ -692,6 +702,7 @@ app:Section("edit", "Edit", function(stack)
             if not ed.ref or ed.ref.kind ~= "ext" then return end
             -- a second click while it waits cancels, so it never asks twice
             if capture:IsShown() then cancelCapture(); app:Refresh() return end
+            if InCombatLockdown() then app:Print("set the key after combat.") return end
             capture:Show()
             app:Print("press the key (with Shift / Ctrl / Alt if you like) for " .. Esc(ed.ref.name) .. "; Escape cancels.")
             app:Refresh()

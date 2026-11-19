@@ -711,6 +711,24 @@ step("Set key: a second click cancels (one chat line each); modifier keys alone 
 	check(ns.keyCapture:IsShown() and not MouseoverMacrosCharDB.binds[id], "a modifier alone was taken")
 	press(ns.keyCapture, "F7")
 	check(not ns.keyCapture:IsShown() and MouseoverMacrosCharDB.binds[id] == "F7" and set:GetText() == "Set key", "F7 not bound")
+	-- combat starts while it waits: the keyboard is given back at once, nothing bound
+	set:GetScript("OnClick")(set)
+	check(ns.keyCapture:IsShown(), "waiting again")
+	MOCK.combat = true
+	MOCK.Fire("PLAYER_REGEN_DISABLED")
+	check(not ns.keyCapture:IsShown(), "still holds the keyboard in combat")
+	check(last():find("combat started", 1, true), "says why: " .. last())
+	-- and in combat it doesn't start waiting
+	set:GetScript("OnClick")(set)
+	check(not ns.keyCapture:IsShown() and last():find("after combat", 1, true), "Set key in combat")
+	-- Escape with unsaved changes in combat: left to the game (no question on top of the Game Menu)
+	ns.ed.body = "/say changed"
+	local onKey = ns.app.window:GetScript("OnKeyDown")
+	onKey(ns.app.window, "ESCAPE")
+	check(not LibStub("EverlookUI-1").IsPopupShown(), "asked about unsaved changes in combat")
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	ns.ed.body = "/say key"
 	ns.app:Close()
 	ns.DeleteExt(ns.ExtRef(id))
 end)
