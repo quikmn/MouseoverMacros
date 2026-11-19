@@ -278,17 +278,54 @@ local function Button(id)
 end
 ns.ExtButton = Button
 
+-- What a key does without /mom (the game's binding, or another addon's override), as the key binding list
+-- names it ("Move and Steer"), or nil. Read while /mom's own overrides are cleared.
+local function BoundTo(key)
+    if not GetBindingAction or not key then return nil end
+    local ok, action = pcall(GetBindingAction, key, true)
+    if not ok or type(action) ~= "string" or action == "" then return nil end
+    local text = _G["BINDING_NAME_" .. action]
+    if type(text) ~= "string" or text == "" then
+        local button = action:match("^CLICK ([^:]+)")
+        text = button and ("a click on " .. button) or action
+    end
+    return text, action
+end
+ns.BoundTo = BoundTo
+
+-- The ring's key takes over a key that already did something: say so once (per key and action, per character),
+-- with how to change it. The Ring page shows it too (ns.ringReplaces).
+local function TellRingClash(key)
+    ns.ringReplaces = nil
+    if not key then return end
+    local text, action = BoundTo(key)
+    if not text then return end
+    ns.ringReplaces = text
+    local cdb = CDB()
+    cdb.ringTold = type(cdb.ringTold) == "table" and cdb.ringTold or {}
+    local told = key .. "=" .. action
+    if cdb.ringTold[told] then return end
+    cdb.ringTold[told] = true
+    local keyText = ns.Ring and ns.Ring.KeyText and ns.Ring.KeyText(key) or key
+    if ns.app then
+        ns.app:Print(("the ring now opens on %s, which did %s before. Pick another ring key on the Ring page "
+            .. "(/mom ring key <key>), or /mom ring off gives the key back."):format(keyText, text))
+    end
+end
+
 local function ApplyBindings()
     bindOwner = bindOwner or CreateFrame("Frame")
     ClearOverrideBindings(bindOwner)
+    -- the ring's key: what it did before ours (read now, with /mom's overrides cleared)
+    local ringKey, ringButton
+    if ns.RingBinding then ringKey, ringButton = ns.RingBinding() end
+    TellRingClash(ringKey)
     for id, key in pairs(CDB().binds) do
         if DB().ext[id] then SetOverrideBindingClick(bindOwner, false, key, "MoMX_" .. id, "LeftButton")
         else CDB().binds[id] = nil end
     end
     -- the ring's key (Ring.lua), set after the macros' so it wins a clash
-    local key, button
-    if ns.RingBinding then key, button = ns.RingBinding() end
-    if key then SetOverrideBindingClick(bindOwner, false, key, button, "LeftButton") end
+    if ringKey then SetOverrideBindingClick(bindOwner, false, ringKey, ringButton, "LeftButton") end
 end
 ns.ApplyBindings = ApplyBindings
 

@@ -686,6 +686,26 @@ step("Set key: closing the window cancels it, so a later key press is not bound"
 	ns.DeleteExt(ns.ExtRef(id))
 end)
 
+step("the ring's key: when it takes over a key in use, says once what it replaced and how to change it", function()
+	GetBindingAction = function(k) if k == "BUTTON3" then return "MOVEANDSTEER" end return "" end
+	BINDING_NAME_MOVEANDSTEER = "Move and Steer"
+	MouseoverMacrosCharDB.ringTold = nil
+	local n = #MOCK.log
+	ns.ApplyBindings(); ns.ApplyBindings()
+	local said = 0
+	for i = n + 1, #MOCK.log do if MOCK.log[i]:find("which did Move and Steer before", 1, true) then said = said + 1 end end
+	check(said == 1, "told " .. said .. " times")
+	check(logHas("/mom ring key <key>"), "says how to change it")
+	check(ns.ringReplaces == "Move and Steer", "the Ring page shows it")
+	-- a free key: nothing said
+	GetBindingAction = function() return "" end
+	n = #MOCK.log
+	ns.ApplyBindings()
+	check(#MOCK.log == n, "free key: no line")
+	check(ns.ringReplaces == nil, "nothing replaced")
+	GetBindingAction, BINDING_NAME_MOVEANDSTEER = nil, nil
+end)
+
 -- The first button row on a page whose first button reads `label`.
 local function rowWith(section, label)
 	for _, w in ipairs(ns.app.sections[section].stack.widgets) do

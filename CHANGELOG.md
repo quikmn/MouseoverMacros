@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The ring no longer takes the middle mouse button silently: if that key (or the ring key you picked) already did something, /mom says once what it replaced, for example "Move and Steer", and how to pick another key (Ring page, `/mom ring key <key>`) or give it back (`/mom ring off`). The Ring page shows it too.
 - "Set key" lets go of your keyboard the moment combat starts (it used to keep waiting for a key and swallow your keys in the fight); set the key again after combat. Pressing Escape in combat with unsaved changes no longer opens the Game Menu and the "unsaved changes" question at the same time: in combat Escape only opens the Game Menu.
 - /mom no longer closes Blizzard's macro window. Macros in the game menu (with "Open MoM for /macro" on) and the "Open /mom" button in Blizzard's window now open /mom next to it; close each one when you like.
 - "Pick up" is greyed out in combat (the game doesn't allow putting a macro on your cursor then, and it used to cause an "action blocked" error). Its tooltip says "after combat"; it works again as soon as combat ends.
