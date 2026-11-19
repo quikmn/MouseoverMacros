@@ -826,9 +826,9 @@ app:Command("blizzard", "blizzard", "open Blizzard's own macro window (also whil
 ------------------------------------------------------------------------
 -- /macro is an ordinary slash command (SlashCmdList.MACRO; the secure ones live in a separate list
 -- addons can't reach), so replacing that entry is safe. The game menu's and the chat menu's "Macros"
--- call ShowMacroFrame(): a hooksecurefunc hook (Blizzard's function itself is never replaced) closes
--- Blizzard's window again right away and opens ours. Not in combat: closing Blizzard's window saves
--- its text, which the game refuses from an addon in combat, so there it stays open as it was.
+-- call ShowMacroFrame(): a hooksecurefunc hook (Blizzard's function itself is never replaced) opens ours
+-- next to it. Blizzard's window is never closed by /mom (no Hide-UI-panel calls): both stay open, side by side,
+-- and the player closes each one when they like (NoAutoClose / BlizzMove users rely on that).
 local allowBlizzard -- Blizzard's window was opened on purpose (/mom blizzard, our buttons): leave it
 local blizzSlash
 
@@ -878,9 +878,8 @@ end
 
 if type(ShowMacroFrame) == "function" then
     hooksecurefunc("ShowMacroFrame", function()
-        if allowBlizzard or not Takeover() or InCombatLockdown() then return end
-        if MacroFrame and MacroFrame:IsShown() then HideUIPanel(MacroFrame) end
-        ns.OpenForMacro()
+        if allowBlizzard or not Takeover() then return end
+        ns.OpenForMacro() -- ours opens too; Blizzard's stays open
     end)
 end
 
@@ -893,9 +892,7 @@ local function OnMacroUI()
     macroButton:SetPoint("BOTTOMLEFT", MacroFrame, "BOTTOMLEFT", 88, 4) -- between Delete and New
     macroButton:SetText("Open /mom")
     macroButton:SetScript("OnClick", function()
-        -- closing Blizzard's window saves its text: not from here in combat (ours opens on top)
-        if not InCombatLockdown() then HideUIPanel(MacroFrame) end
-        ns.OpenForMacro()
+        ns.OpenForMacro() -- ours opens next to it; Blizzard's window stays open
     end)
     macroButton:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- /mom no longer closes Blizzard's macro window. Macros in the game menu (with "Open MoM for /macro" on) and the "Open /mom" button in Blizzard's window now open /mom next to it; close each one when you like.
 - "Pick up" is greyed out in combat (the game doesn't allow putting a macro on your cursor then, and it used to cause an "action blocked" error). Its tooltip says "after combat"; it works again as soon as combat ends.
 
 ## v0.1.0 (2026-11-19)

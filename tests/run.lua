@@ -899,31 +899,36 @@ step("/macro and the game menu open /mom (on the game macros); Blizzard's window
 	SlashCmdList.MACRO("")
 	check(ns.app:IsShown() and ns.app.current == "account" and MOCK.blizzSlash == 0 and not MacroFrame, "/macro: " .. tostring(ns.app.current))
 	ns.app:Close()
-	-- the game menu's / chat menu's Macros: Blizzard's window is closed again and ours opens
+	-- the game menu's / chat menu's Macros: ours opens next to Blizzard's, which stays open (never closed by /mom)
 	ShowMacroFrame()
-	check(MacroFrame and not MacroFrame:IsShown() and ns.app:IsShown() and ns.app.current == "account", "game menu")
+	check(MacroFrame and MacroFrame:IsShown() and ns.app:IsShown() and ns.app.current == "account", "game menu")
+	MacroFrame:Hide()
 	check(ns.macroButton and ns.macroButton:GetParent() == MacroFrame, "no button in Blizzard's window")
 	-- /mom blizzard: Blizzard's window, ours closed; the game menu doesn't take it away while it's open
 	SlashCmdList.MOUSEOVERMACROS("blizzard")
 	check(MacroFrame:IsShown() and not ns.app:IsShown(), "/mom blizzard")
 	ShowMacroFrame()
 	check(MacroFrame:IsShown() and not ns.app:IsShown(), "Blizzard's window taken away while open on purpose")
-	-- its "Open /mom" button
+	-- its "Open /mom" button: ours opens, Blizzard's stays
 	ns.macroButton:GetScript("OnClick")(ns.macroButton)
-	check(not MacroFrame:IsShown() and ns.app:IsShown(), "Open /mom button")
+	check(MacroFrame:IsShown() and ns.app:IsShown(), "Open /mom button")
+	MacroFrame:Hide()
+	ns.app:Close()
 	-- once closed, the takeover is back
 	ShowMacroFrame()
-	check(not MacroFrame:IsShown() and ns.app:IsShown(), "takeover not back")
+	check(MacroFrame:IsShown() and ns.app:IsShown(), "takeover not back")
+	MacroFrame:Hide()
 	-- the sidebar button
 	local footer = ns.app.window.footer[1]
 	check(footer and footer:GetText() == "Blizzard's macro window", "sidebar button")
 	footer:GetScript("OnClick")(footer)
 	check(MacroFrame:IsShown() and not ns.app:IsShown(), "sidebar button did not open Blizzard's window")
 	MacroFrame:Hide()
-	-- in combat the game menu leaves Blizzard's window alone (closing it would save its text from an addon)
+	-- in combat too, Blizzard's window is left alone
 	MOCK.combat = true
 	ShowMacroFrame()
 	check(MacroFrame:IsShown(), "closed Blizzard's window in combat")
+	ns.app:Close()
 	MacroFrame:Hide()
 	SlashCmdList.MACRO("")
 	check(ns.app:IsShown() and not MacroFrame:IsShown(), "/macro in combat")
@@ -1266,8 +1271,8 @@ step("ring: the Ring page and /mom ring edit it (drop, sub-ring, reorder, reset)
 	ns.app:Close()
 end)
 
-step("ring: never touches other windows (UIPanelWindows, Show/HideUIPanel, UISpecialFrames, closing windows)", function()
-	for _, file in ipairs({ "RingData.lua", "Ring.lua", "RingPage.lua" }) do
+step("never touches other windows (UIPanelWindows, Show/HideUIPanel, UISpecialFrames, closing windows)", function()
+	for _, file in ipairs({ "RingData.lua", "Ring.lua", "RingPage.lua", "Window.lua", "Manager.lua", "MouseoverMacros.lua" }) do
 		local src = assert(io.open(ROOT .. "/" .. file)):read("*a")
 		for _, bad in ipairs({ "UIPanelWindows", "ShowUIPanel", "HideUIPanel", "UISpecialFrames", "CloseAllWindows", "CloseSpecialWindows", "CloseWindows" }) do
 			check(not src:find(bad, 1, true), file .. " uses " .. bad)
