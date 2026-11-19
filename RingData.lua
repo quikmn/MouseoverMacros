@@ -112,7 +112,7 @@ function R.ScanBags()
     local numSlots = (C and C.GetContainerNumSlots) or GetContainerNumSlots
     local itemInfo = (C and C.GetContainerItemInfo) or GetContainerItemInfo
     if not numSlots or not itemInfo then return out end
-    for bag = 0, (NUM_BAG_SLOTS or 4) do
+    for bag = 0, (NUM_TOTAL_EQUIPPED_BAG_SLOTS or NUM_BAG_SLOTS or 4) do
         for slot = 1, Num(numSlots(bag)) or 0 do
             local info = itemInfo(bag, slot)
             local id, count

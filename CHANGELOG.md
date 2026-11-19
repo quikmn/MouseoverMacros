@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Rings also find items in your reagent bag (WoW Forever's extra bag slot).
 
 - The ring no longer takes the middle mouse button silently: if that key (or the ring key you picked) already did something, /mom says once what it replaced, for example "Move and Steer", and how to pick another key (Ring page, `/mom ring key <key>`) or give it back (`/mom ring off`). The Ring page shows it too.
 - "Set key" lets go of your keyboard the moment combat starts (it used to keep waiting for a key and swallow your keys in the fight); set the key again after combat. Pressing Escape in combat with unsaved changes no longer opens the Game Menu and the "unsaved changes" question at the same time: in combat Escape only opens the Game Menu.
