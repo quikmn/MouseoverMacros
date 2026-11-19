@@ -2,7 +2,7 @@
 
 WoW Forever (interface 16001). `/mom` opens a macro window: your class's mouseover set, every macro you have, extended macros past the slot limits, backups and export / import. `/mom help` lists the chat commands.
 
-`/macro` opens this window too (on your account macros), and so does Macros in the game menu and the chat menu (outside combat). Blizzard's own macro window: "Blizzard's macro window" at the bottom of the sidebar or `/mom blizzard`; it has an "Open /mom" button to come back. To give `/macro` back to Blizzard, switch off "Open MoM for /macro" under Options (`/mom takeover off`).
+`/macro` opens this window too (on your account macros), and Macros in the game menu and the chat menu opens it next to Blizzard's window (/mom never closes Blizzard's window). Blizzard's own macro window: "Blizzard's macro window" at the bottom of the sidebar or `/mom blizzard`; it has an "Open /mom" button to come back. To give `/macro` back to Blizzard, switch off "Open MoM for /macro" under Options (`/mom takeover off`).
 
 ## The window
 
