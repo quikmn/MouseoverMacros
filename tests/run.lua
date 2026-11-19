@@ -367,6 +367,18 @@ step("the window list: names, states, Create / Update / Pick up buttons", functi
 	check(smite.title:GetText():find(entry("smite").macro, 1, true), "row shows the macro name")
 	smite.buttons[2]:GetScript("OnClick")(smite.buttons[2])
 	check(MOCK.picked == GetMacroIndexByName(entry("smite").macro), "pick up")
+	-- in combat the game blocks PickupMacro: the button greys out, the tooltip says "after combat", a click does nothing
+	MOCK.picked = nil
+	MOCK.combat = true
+	MOCK.Fire("PLAYER_REGEN_DISABLED")
+	check(smite.buttons[2]:GetAlpha() < 1, "Pick up greyed out in combat")
+	smite.buttons[2]:GetScript("OnClick")(smite.buttons[2])
+	check(MOCK.picked == nil, "PickupMacro called in combat")
+	ns.PickUp(ns.List("account")[1] or { kind = "game", id = 1 })
+	check(MOCK.picked == nil, "ns.PickUp in combat")
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	check(smite.buttons[2]:GetAlpha() == 1, "Pick up back after combat")
 	DeleteMacro(GetMacroIndexByName(entry("dplague").macro))
 	MOCK.Fire("UPDATE_MACROS")
 	check(dplague.buttons[1]:GetText() == "Create" and not dplague.buttons[2]:IsShown(), "missing macro row")

@@ -297,7 +297,18 @@ local function CountsLine()
 end
 ns.CountsLine = CountsLine
 
+-- Putting a macro on the cursor is blocked by the game in combat (ADDON_ACTION_BLOCKED): the Pick up buttons grey
+-- out in combat (the row's tooltip says "after combat") and come back when it ends.
+local function CanPickUp() return not InCombatLockdown() end
+ns.CanPickUp = CanPickUp
+local PICKUP_LATER = "|cffffd27fPick up: after combat (the game does not allow it in combat).|r"
+local function PickUpTip(t)
+    if not CanPickUp() then t[#t + 1] = " "; t[#t + 1] = PICKUP_LATER end
+    return t
+end
+
 local function PickUp(ref)
+    if not CanPickUp() then app:Print("pick it up after combat (the game does not allow it in combat).") return end
     if ref.kind == "ext" then
         local bar = ns.ExtBarMacro(ref.id)
         if bar and PickupMacro then PickupMacro(bar.index) end
@@ -340,12 +351,12 @@ local function MacroList(stack, which)
         tooltip = function(r)
             local t = { r.name, ns.Cost(r), " " }
             for line in (r.body or ""):gmatch("[^\n]+") do t[#t + 1] = Esc(line) end
-            return t
+            return PickUpTip(t)
         end,
         onClick = function(r) ns.Edit(r) end,
         buttons = {
             { label = "Edit", width = 60, onClick = function(r) ns.Edit(r) end },
-            { label = "Pick up", width = 70, onClick = function(r) PickUp(r) end,
+            { label = "Pick up", width = 70, onClick = function(r) PickUp(r) end, usable = CanPickUp,
                 shown = function(r) return r.kind == "game" or ns.ExtBarMacro(r.id) ~= nil end },
         },
     })
@@ -420,12 +431,17 @@ app:Section("templates", "Templates", function(stack)
             if e.clash then t[#t + 1] = "|cffffb347" .. ns.ClashNote(e) .. "|r" end
             t[#t + 1] = " "
             t[#t + 1] = Esc(e.body)
-            return t
+            return PickUpTip(t)
         end,
         buttons = {
             { label = function(e) return BUTTON[e.status] end,
                 width = 90, onClick = function(e) ns.InstallOne(e) end, usable = function(e) return e.status ~= "ok" end },
-            { label = "Pick up", width = 74, onClick = function(e) if e.index and PickupMacro then PickupMacro(e.index) end end,
+            { label = "Pick up", width = 74, usable = CanPickUp,
+                onClick = function(e)
+                    if not e.index then return end
+                    if not CanPickUp() then app:Print("pick it up after combat (the game does not allow it in combat).") return end
+                    if PickupMacro then PickupMacro(e.index) end
+                end,
                 shown = function(e) return e.index ~= nil end },
         },
     })
@@ -684,7 +700,9 @@ app:Section("edit", "Edit", function(stack)
         { label = "Put on a bar", width = 130, onClick = function()
             if not ed.ref or ed.ref.kind ~= "ext" then return end
             local ok, msg, index = ns.ExtToBar(ed.ref)
-            if ok and index and PickupMacro then PickupMacro(index) end
+            if ok and index and PickupMacro then
+                if CanPickUp() then PickupMacro(index) else msg = (msg or "") .. " Pick it up from the list after combat." end
+            end
             Say(ok, msg)
         end, desc = "Makes a one-line _mom macro that clicks this one (takes one slot) and puts it on your cursor." },
         search = false, -- only means something with an extended macro open; never an empty search result

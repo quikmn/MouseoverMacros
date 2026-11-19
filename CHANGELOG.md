@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- "Pick up" is greyed out in combat (the game doesn't allow putting a macro on your cursor then, and it used to cause an "action blocked" error). Its tooltip says "after combat"; it works again as soon as combat ends.
+
 ## v0.1.0 (2026-11-19)
 
 - Settings: an AI help button copies a description of every setting for an AI assistant, and `/mom apply` runs the commands it gives back.

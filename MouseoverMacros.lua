@@ -574,6 +574,7 @@ f:RegisterEvent("PLAYER_LOGIN")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
 f:RegisterEvent("UPDATE_MACROS")
 f:RegisterEvent("PLAYER_REGEN_ENABLED")
+f:RegisterEvent("PLAYER_REGEN_DISABLED")
 local migrated
 f:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
@@ -593,8 +594,12 @@ f:SetScript("OnEvent", function(_, event, arg1)
         if ns.OnWorld then ns.OnWorld() end
     elseif event == "UPDATE_MACROS" then
         app:Refresh()
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        if ns.OnCombatStart then ns.OnCombatStart() end
+        app:Refresh() -- Pick up buttons grey out
     elseif event == "PLAYER_REGEN_ENABLED" then
         RunQueue()
         if ns.OnCombatEnd then ns.OnCombatEnd() end
+        app:Refresh()
     end
 end)
