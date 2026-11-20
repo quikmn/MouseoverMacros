@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Settings window: switches, buttons and sliders use a softer shade of the accent colour, an on switch has a dark knob so it stands out, and boxes have cleaner rounded edges.
 - Rings also find items in your reagent bag (WoW Forever's extra bag slot).
 
 - The ring no longer takes the middle mouse button silently: if that key (or the ring key you picked) already did something, /mom says once what it replaced, for example "Move and Steer", and how to pick another key (Ring page, `/mom ring key <key>`) or give it back (`/mom ring off`). The Ring page shows it too.
