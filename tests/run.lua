@@ -169,6 +169,7 @@ step("macro bodies: the old text plus a #mom marker line, all within 255", funct
 		poh = "#showtooltip Prayer of Healing\n/cast [@mouseover,help,nodead][help,nodead][@player] Prayer of Healing\n#mom poh",
 		dispel = "#showtooltip Dispel Magic\n/cast [@mouseover,exists,nodead][exists,nodead] Dispel Magic\n#mom dispel",
 		swp = "#showtooltip Shadow Word: Pain\n/cast [@mouseover,harm,nodead][harm,nodead] Shadow Word: Pain\n#mom swp",
+		swd = "#showtooltip Shadow Word: Death\n/stopcasting\n/cast [@mouseover,harm,nodead][harm,nodead] Shadow Word: Death\n#mom swd",
 		rez = "#showtooltip Resurrection\n/cast [@mouseover,help,dead][help,dead] Resurrection\n#mom rez",
 	}
 	local n = 0

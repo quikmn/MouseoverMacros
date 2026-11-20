@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Shadow Word: Death first stops whatever you are casting or channeling (Mind Flay, a heal), then fires at the mouseover enemy, else your target. Run /mom install (or press Install) to update a Shadow Word: Death macro /mom already made.
+
 ## v0.2.0 (2026-11-20)
 - Settings window: switches, buttons and sliders use a softer shade of the accent colour, an on switch has a dark knob so it stands out, and boxes have cleaner rounded edges.
 - Rings also find items in your reagent bag (WoW Forever's extra bag slot).

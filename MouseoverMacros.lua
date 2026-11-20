@@ -23,6 +23,10 @@ ns.KINDS = {
     -- Hostile: whoever the mouse is over, else your target.
     harm = { desc = "mouseover enemy, else target",
         body = function(spell) return "#showtooltip " .. spell .. "\n/cast [@mouseover,harm,nodead][harm,nodead] " .. spell end },
+    -- Hostile, and it cuts off whatever you are casting or channeling (Mind Flay) first: for an instant finisher you
+    -- weave in mid-cast (Shadow Word: Death). /stopcasting stops a channel as well as a cast.
+    harmStop = { desc = "stops your cast or channel, then mouseover enemy, else target",
+        body = function(spell) return "#showtooltip " .. spell .. "\n/stopcasting\n/cast [@mouseover,harm,nodead][harm,nodead] " .. spell end },
     -- Either side (Dispel Magic: cleanse a friend or purge an enemy): mouseover, else target.
     any = { desc = "mouseover friend or enemy, else target",
         body = function(spell) return "#showtooltip " .. spell .. "\n/cast [@mouseover,exists,nodead][exists,nodead] " .. spell end },
@@ -59,7 +63,7 @@ ns.MACROS = {
         { "swp",     "Shadow Word: Pain", "harm" },
         { "smite",   "Smite", "harm" },
         { "mblast",  "Mind Blast", "harm" },
-        { "swd",     "Shadow Word: Death", "harm" },
+        { "swd",     "Shadow Word: Death", "harmStop" },
         { "dplague", "Devouring Plague", "harm" },
         { "shackle", "Shackle Undead", "harm" },
         { "soothe",  "Mind Soothe", "harm" },
