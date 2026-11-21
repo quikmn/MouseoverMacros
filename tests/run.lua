@@ -1,4 +1,4 @@
--- Offline tests for MouseoverMacros against wowmock.lua: macro bodies, _mom names and ownership,
+-- Offline tests for EverlookDB Macros against wowmock.lua: macro bodies, _mom names and ownership,
 -- migration of old plain-named macros, the on/off switches, where new macros go, the combat queue,
 -- Auto Self Cast, every slash command and the window.
 local ROOT = ...
@@ -156,6 +156,7 @@ local addonEnv = setmetatable({}, { __index = _G, __newindex = function(_, k, v)
 step("load TOC files; defaults on a fresh install", function()
 	local toc = assert(io.open(ROOT .. "/" .. ADDON .. ".toc")):read("*a")
 	check(toc:find("## SavedVariablesPerCharacter: MouseoverMacrosCharDB", 1, true), "per-character saved variables")
+	check(toc:find("## Title: EverlookDB Macros", 1, true), "the TOC title is EverlookDB Macros")
 	for line in toc:gmatch("[^\r\n]+") do
 		if not line:match("^%s*#") and line:match("%.lua%s*$") then
 			local chunk, err = loadfile(ROOT .. "/" .. line:gsub("\\", "/"):gsub("%s+$", ""))
@@ -633,6 +634,15 @@ step("help, list, settings and unknown commands", function()
 	SlashCmdList.MOUSEOVERMACROS("settings")
 	SlashCmdList.MOUSEOVERMACROS("bogus")
 	check(last():find("/mom help", 1, true), "unknown reply")
+	check(last():find("EverlookDB Macros|r: ", 1, true), "chat prefix: " .. last())
+end)
+
+step("the name is EverlookDB Macros; /emacros is an alias of /mom", function()
+	check(ns.app.name == "EverlookDB Macros", "app name " .. tostring(ns.app.name))
+	check(SLASH_MOUSEOVERMACROS1 == "/mom" and SLASH_MOUSEOVERMACROS2 == "/emacros", "slash words")
+	MOCK.log = {}
+	SlashCmdList.MOUSEOVERMACROS("help")
+	check(table.concat(MOCK.log, "\n"):find("/emacros", 1, true), "help names /emacros")
 end)
 
 step("chat commands follow the shared pattern: get/set, a setting by on/off, suggestions, reset asks", function()
@@ -1333,7 +1343,7 @@ step("the player's macros were never changed", function()
 end)
 
 step("no taint: only our own globals", function()
-	local allowed = { MouseoverMacrosDB = true, MouseoverMacrosCharDB = true, SLASH_MOUSEOVERMACROS1 = true, LibStub = true }
+	local allowed = { MouseoverMacrosDB = true, MouseoverMacrosCharDB = true, SLASH_MOUSEOVERMACROS1 = true, SLASH_MOUSEOVERMACROS2 = true, LibStub = true }
 	for k in pairs(globalWrites) do check(allowed[k], "addon assigned the global " .. tostring(k)) end
 	check(next(StaticPopupDialogs) == nil and next(UISpecialFrames) == nil, "Blizzard lists touched")
 end)

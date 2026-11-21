@@ -1,4 +1,4 @@
--- MouseoverMacros: the macro manager behind the /mom window.
+-- EverlookDB Macros: the macro manager behind the /mom window.
 --
 -- Game macros: the client's own (120 account, MAX_CHARACTER_MACROS character slots, 255 characters
 -- each; the client enforces those, /mom can't raise them). Any of them can be edited here, because

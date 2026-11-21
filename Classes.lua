@@ -1,4 +1,4 @@
--- MouseoverMacros: the baseline mouseover set for every class (WoW Forever, levels 1-60).
+-- EverlookDB Macros: the baseline mouseover set for every class (WoW Forever, levels 1-60).
 --
 -- One entry per spell: { key, English name, kind, id = rank 1 spell ID, on = default, why = short reason, pet = a pet's spell }.
 -- - The macro casts the spell by the name the client gives the ID (C_Spell.GetSpellName), so it works on every

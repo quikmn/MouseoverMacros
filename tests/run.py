@@ -1,4 +1,4 @@
-"""Run MouseoverMacros' offline tests in Lua 5.1 (same version as WoW) via lupa.
+"""Run EverlookDB Macros' offline tests in Lua 5.1 (same version as WoW) via lupa.
 
 run.lua: the addon end to end in one session (a priest). baseline.lua: the class sets and automatic set-up,
 each case in a fresh Lua state (a fresh login).

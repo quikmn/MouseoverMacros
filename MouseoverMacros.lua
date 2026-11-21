@@ -1,4 +1,4 @@
--- MouseoverMacros: mouseover macros for your class (mouseover, then target; never yourself).
+-- EverlookDB Macros: mouseover macros for your class (mouseover, then target; never yourself).
 -- /mom opens the window: every macro with an on/off switch, Create / Update and Pick up buttons.
 -- /mom install creates or updates all the switched-on ones at once.
 --
@@ -398,10 +398,11 @@ ns.queue = queue
 -- Window and chat
 ------------------------------------------------------------------------
 local app = UI:NewApp({
-    name = "Mouseover Macros", -- two words: the sidebar wraps it instead of cutting it off
+    name = "EverlookDB Macros", -- two words: the sidebar wraps it instead of cutting it off
     frameName = "MouseoverMacros",
     addon = ADDON,
     slash = "/mom",
+    aliases = { "/emacros" }, -- the EverlookDB family's /e<name> (like /ebar, /epets)
     tagline = "Your macros: mouseover sets, extended macros past the slot limits, backups.",
     accent = { 0.25, 0.75, 1.0 },
     width = 860, height = 640,
@@ -638,7 +639,7 @@ app:Setting({
     get = function() return db.autoSelfCastOff end, set = function(v) db.autoSelfCastOff = v end, after = ApplySelfCast,
 })
 app:Setting({
-    key = "takeover", type = "bool", label = "Open MoM for /macro", chatLabel = "Open MoM for /macro",
+    key = "takeover", type = "bool", label = "Open /mom for /macro", chatLabel = "Open /mom for /macro",
     desc = "/macro, and Macros in the game menu and the chat menu, open this window instead of Blizzard's. "
         .. "Blizzard's own window stays one click away: the button at the bottom left, or /mom blizzard.",
     get = function() return db.takeover end, set = function(v) db.takeover = v end,
@@ -736,7 +737,7 @@ ns.SpellIcon = SpellIcon
 ns.InstallOne = InstallOne
 ns.Where = Where
 
-app:RegisterSlash("MOUSEOVERMACROS") -- /mom
+app:RegisterSlash("MOUSEOVERMACROS") -- /mom, /emacros
 
 local f = CreateFrame("Frame")
 f:RegisterEvent("ADDON_LOADED")

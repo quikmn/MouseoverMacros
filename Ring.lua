@@ -1,4 +1,4 @@
--- MouseoverMacros: the ring. Hold the ring key (default: middle mouse button), move the mouse toward a
+-- EverlookDB Macros: the ring. Hold the ring key (default: middle mouse button), move the mouse toward a
 -- slice, let go: that slice is used. A sub-ring slice opens its own ring around the same point; then
 -- click a slice (or press and let go of the key again toward it). Escape, a right click, or letting
 -- go in the middle closes it.

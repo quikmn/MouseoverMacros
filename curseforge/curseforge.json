@@ -1,0 +1,18 @@
+{
+  "projectId": "TODO",
+  "name": "EverlookDB Macros",
+  "releaseType": "release",
+  "relations": [],
+  "categories": {
+    "primary": "Action Bars",
+    "additional": [
+      "Combat",
+      "Miscellaneous"
+    ]
+  },
+  "links": {
+    "Website": "https://everlookdb.com/mouseover-macros.html",
+    "Github": "https://github.com/quikmn/MouseoverMacros"
+  },
+  "syncOnRelease": false
+}

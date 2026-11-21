@@ -1,5 +1,5 @@
 ## Interface: 16001
-## Title: MouseoverMacros
+## Title: EverlookDB Macros
 ## Notes: /mom: your macros - mouseover sets, extended macros past the slot limits, backups, export/import, and a ring menu on the middle mouse button.
 ## Author: quikmn
 ## X-License: GPL-3.0

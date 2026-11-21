@@ -1,4 +1,4 @@
--- MouseoverMacros: the /mom window. Sidebar: Mine, Account, Character, Extended, Templates, Edit,
+-- EverlookDB Macros: the /mom window. Sidebar: Mine, Account, Character, Extended, Templates, Edit,
 -- Backups, Options.
 local _, ns = ...
 local UI = LibStub("EverlookUI-1")
@@ -914,7 +914,7 @@ local function OnMacroUI()
     end)
     macroButton:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:AddLine("Mouseover Macros", 1, 1, 1)
+        GameTooltip:AddLine("EverlookDB Macros", 1, 1, 1)
         GameTooltip:AddLine("Opens /mom: extended macros past the slot limits, backups, templates and the editor.", nil, nil, nil, true)
         GameTooltip:Show()
     end)

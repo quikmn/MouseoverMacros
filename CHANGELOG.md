@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- The addon is now called EverlookDB Macros (was MouseoverMacros): it does more than mouseover macros. Settings, macros, /mom and the folder stay the same.
+- /emacros opens the window too, like /ebar and /epets in the other EverlookDB addons.
+
 ## v0.3.0 (2026-11-21)
 - Every class now has a mouseover set, not only priests: Warrior, Paladin, Hunter, Rogue, Shaman, Mage, Warlock and Druid, with the spells that make sense as a mouseover macro (heals, buffs, dispels and resurrections on a friend; DoTs, curses, interrupts, crowd control and taunts on an enemy; Holy Shock and Dispel Magic on either). Self-only spells, stances, forms, auras, totems and ground spells are left out. None of them ever falls back to casting on you.
 - The first time you log in on a character, /mom makes the mouseover macros for the spells it knows and says so in one chat line. It uses character macro slots only, always leaves 3 free for your own, and names what didn't fit. Characters you had already set up are left as they were. Switch it off under Options ("Set up every character automatically").

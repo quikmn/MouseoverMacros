@@ -1,4 +1,4 @@
--- MouseoverMacros: the Ring page of the /mom window and /mom ring in chat. Editing the ring: the key,
+-- EverlookDB Macros: the Ring page of the /mom window and /mom ring in chat. Editing the ring: the key,
 -- the 8 directions, sub-rings and their slices (drag spells, items, macros, mounts or equipment sets
 -- onto a direction, or add a dynamic slice like "Best food"). Every change rebuilds the ring; in
 -- combat the ring keeps what it had until combat ends.

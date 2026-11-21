@@ -1,4 +1,4 @@
--- MouseoverMacros: the ring's data. What a ring holds (db.ring), what each slice turns into on this
+-- EverlookDB Macros: the ring's data. What a ring holds (db.ring), what each slice turns into on this
 -- character right now (best food in the bags, known profession spells ...), and the direction maths.
 --
 -- db.ring.top: 8 compass slots, 1 = up, then clockwise (3 = right, 5 = down, 7 = left); false = empty.
