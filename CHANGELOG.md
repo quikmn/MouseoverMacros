@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.3 (2026-11-21)
 - Drag macros straight onto your action bars: drag any macro's row in the lists, or the big icon on the Edit page (a click on that icon picks it up too). Pick up still works.
 
 ## v0.3.2 (2026-11-21)
