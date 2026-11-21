@@ -28,9 +28,9 @@ Hold the ring key (the middle mouse button by default), move the mouse toward a 
 
 A sub-ring (blue corner) opens its own ring around the same point. Click a slice, or press and let go of the key toward it. Escape, a right click, a click far away or letting go in the middle closes it.
 
-**Best consumable:** among the items in your bags of that kind (from the item's use spell: Food, Drink, Healing Potion, Restore Mana, First Aid; else its item class), the usable ones first (your level is high enough and the game says it is usable), then the highest required level, then the highest item level, then the bigger stack.
+**Best consumable:** the usable item of that kind with the highest required level, then item level, then the bigger stack.
 
-**Combat:** the ring works in combat. Every slice is a secure button and the direction is worked out by the game's secure code, so nothing insecure casts anything. What the slices hold is set outside combat. It is rebuilt when your bags, spells, macros or equipment sets change, and kept as it is during combat; a change made then (in the bags or on the Ring page) happens when combat ends. Items you use up in combat show greyed. Spells and items are used as they are: the ring never adds a self cast.
+**Combat:** the ring works in combat. Its slices refresh when your bags, spells, macros or equipment sets change; changes made during a fight apply when combat ends, and used-up items show greyed. The ring never adds a self cast.
 
 **Editing:** the **Ring** page in `/mom`. Set the key (any key or mouse button, with Shift / Ctrl / Alt), switch the ring off (the key does what it did before), click a direction to edit it, drag spells, items, macros, mounts or equipment sets onto a direction (onto a sub-ring they are added to it), drag one direction onto another to swap them, make a direction a sub-ring, add dynamic slices ("Best food", "Your buffs", "Fishing lures" ...) or extended macros, reorder and remove. In chat: `/mom ring help`, for example `/mom ring key BUTTON4`, `/mom ring set upright Fishing`, `/mom ring add down hpot`, `/mom ring swap left right`, `/mom ring reset`.
 
@@ -55,7 +55,7 @@ Macros can't be changed in combat: anything you ask for then waits and happens w
 
 ## The mouseover set
 
-Every class has one: the spells worth a mouseover macro, from levels 1 to 60 and every spec (Classes.lua; the reasoning per spell is in the research notes). Warrior 11, Paladin 26, Hunter 11, Rogue 5, Priest 41, Shaman 15, Mage 12, Warlock 27, Druid 24; most are on by default, situational ones (and plain nukes) are listed but off.
+Every class has one: the spells worth a mouseover macro, from levels 1 to 60 and every spec. Warrior 11, Paladin 26, Hunter 11, Rogue 5, Priest 41, Shaman 15, Mage 12, Warlock 27, Druid 24; most are on by default, situational ones (and plain nukes) are listed but off.
 
 - Friendly spells (heals, shields, dispels, buffs, blessings, Innervate, Power Infusion): mouseover, then friendly target. Never yourself.
 - Hostile spells (DoTs, curses, interrupts, crowd control, taunts, Hunter's Mark, Purge): mouseover, then target.
@@ -71,4 +71,4 @@ Every class has one: the spells worth a mouseover macro, from levels 1 to 60 and
 
 ## License
 
-GPL-3.0 (see `LICENSE`). Written from scratch; it embeds LibStub (public domain) to load EverlookUI, the settings-window library shared by the EverlookDB addons.
+GPL-3.0 (see `LICENSE`). Bundles LibStub (public domain).
