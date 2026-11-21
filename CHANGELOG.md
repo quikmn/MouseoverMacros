@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Drag macros straight onto your action bars: drag any macro's row in the lists, or the big icon on the Edit page (a click on that icon picks it up too). Pick up still works.
+
 ## v0.3.2 (2026-11-21)
 - Mages now get mouseover macros for Fireball, Frostbolt, Fire Blast, Arcane Missiles and the wand (Shoot) by default, next to Polymorph and Arcane Intellect. Each casts on the enemy under your mouse, else on your target. Characters set up before get them at the next login; switch any off in /mom.
 

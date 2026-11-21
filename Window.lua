@@ -356,6 +356,7 @@ local function MacroList(stack, which)
             return PickUpTip(t)
         end,
         onClick = function(r) ns.Edit(r) end,
+        drag = function(r) if r.kind == "game" or ns.ExtBarMacro(r.id) then PickUp(r) end end,
         buttons = {
             { label = "Edit", width = 60, onClick = function(r) ns.Edit(r) end },
             { label = "Pick up", width = 70, onClick = function(r) PickUp(r) end, usable = CanPickUp,
@@ -441,6 +442,11 @@ app:Section("templates", "Templates", function(stack)
             t[#t + 1] = Esc(e.body)
             return PickUpTip(t)
         end,
+        drag = function(e)
+            if not e.index then return end
+            if not CanPickUp() then app:Print("pick it up after combat (the game does not allow it in combat).") return end
+            if PickupMacro then PickupMacro(e.index) end
+        end,
         buttons = {
             { label = function(e) return BUTTON[e.status] end,
                 width = 90, onClick = function(e) ns.InstallOne(e) end, usable = function(e) return e.status ~= "ok" end },
@@ -474,7 +480,7 @@ app:Section("templates", "Templates", function(stack)
             { label = "Extended", width = 80, onClick = function(t) Say(ns.MakeTemplate(t, true)) end },
         },
     })
-    UI.Note(stack, "Pick up puts the macro on your cursor: drop it on an action bar slot. Bar addons show a macro's name under the button (\"_mom4821\"); Bartender4 can hide it with its \"Hide Macro Text\" option.")
+    UI.Note(stack, "Drag a macro's row or icon onto an action bar (or use Pick up). Bar addons show a macro's name under the button (\"_mom4821\"); Bartender4 can hide it with its \"Hide Macro Text\" option.")
 end)
 
 ------------------------------------------------------------------------
@@ -520,9 +526,17 @@ app:Section("edit", "Edit", function(stack)
     -- icon: the current one, "Change icon" opens the picker
     local iconRow = CreateFrame("Frame")
     iconRow:SetParent(stack.parent)
-    local tex = iconRow:CreateTexture(nil, "ARTWORK")
-    tex:SetSize(26, 26)
-    tex:SetPoint("LEFT")
+    -- the icon itself: drag it (or click it) onto an action bar, like in the game's own macro window
+    local grab = CreateFrame("Button", nil, iconRow)
+    grab:SetSize(26, 26)
+    grab:SetPoint("LEFT")
+    grab:RegisterForDrag("LeftButton")
+    local function Grab() if ed.ref then PickUp(ed.ref) end end
+    grab:SetScript("OnDragStart", Grab)
+    grab:SetScript("OnClick", Grab)
+    UI.Tooltip(grab, "Drag to your bars", "Drag this icon (or click it) to put the macro on your cursor, then drop it on an action bar. Save first if you changed it.")
+    local tex = grab:CreateTexture(nil, "ARTWORK")
+    tex:SetAllPoints(grab)
     local change = UI.Button(iconRow, "Change icon", function() ed.picking = not ed.picking; stack:RefreshAll() end, 120)
     change:SetPoint("LEFT", 36, 0)
     local dyn = UI.Button(iconRow, "Icon from the spell", function() ed.icon = QM; stack:RefreshAll() end, 170)

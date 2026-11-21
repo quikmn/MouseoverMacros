@@ -38,7 +38,7 @@
 -- An addon with its own settings window hands its settings over with app:ProvideSettings (EverlookUI 11): then chat,
 -- "/x ai" and "/x apply" know them too, and opts.combat = "queue" holds changes made in combat until it ends.
 local LIB_ADDON = ... -- the folder of the addon whose copy this is (its Media\ sits next to this file)
-local MAJOR, MINOR = "EverlookUI-1", 11
+local MAJOR, MINOR = "EverlookUI-1", 12
 local UI = LibStub:NewLibrary(MAJOR, MINOR)
 if not UI then return end
 UI.version = MINOR
@@ -1563,6 +1563,12 @@ function UI.List(stack, opt)
 			GameTooltip:Hide()
 		end)
 		r:SetScript("OnClick", function(self) if self.item ~= nil and opt.onClick then opt.onClick(self.item) end end)
+		-- opt.drag(item): drag the row (icon or anywhere on it) to put the item on the cursor, e.g. a macro onto an
+		-- action bar (EverlookUI 12). The game doesn't send a click after a drag starts, so onClick still works.
+		if opt.drag then
+			r:RegisterForDrag("LeftButton")
+			r:SetScript("OnDragStart", function(self) if self.item ~= nil then opt.drag(self.item) end end)
+		end
 		f.rows[i] = r
 		return r
 	end
