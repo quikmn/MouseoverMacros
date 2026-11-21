@@ -39,37 +39,7 @@ ns.KINDS = {
         body = function(spell) return "#showtooltip " .. spell .. "\n/cast [@mouseover,help,dead][help,dead] " .. spell end },
 }
 
-ns.MACROS = {
-    PRIEST = {
-        { "renew",   "Renew", "help" },
-        { "lheal",   "Lesser Heal", "help" },
-        { "heal",    "Heal", "help" },
-        { "fheal",   "Flash Heal", "help" },
-        { "dgrace",  "Divine Grace", "help" },
-        { "shield",  "Power Word: Shield", "help" },
-        { "fort",    "Power Word: Fortitude", "help" },
-        { "dspirit", "Divine Spirit", "help" },
-        { "fward",   "Fear Ward", "help" },
-        { "sprot",   "Shadow Protection", "help" },
-        -- group buffs: cast on a friend, they buff that friend's whole party (never you by default)
-        { "pfort",   "Prayer of Fortitude", "help" },
-        { "pspirit", "Prayer of Spirit", "help" },
-        { "psprot",  "Prayer of Shadow Protection", "help" },
-        { "poh",     "Prayer of Healing", "helpOrSelf" },
-        { "curedis", "Cure Disease", "help" },
-        { "abolish", "Abolish Disease", "help" },
-        { "dispel",  "Dispel Magic", "any" },
-        { "penance", "Penance", "any" },  -- heals a friend, hurts an enemy: mouseover, else target; never you
-        { "swp",     "Shadow Word: Pain", "harm" },
-        { "smite",   "Smite", "harm" },
-        { "mblast",  "Mind Blast", "harm" },
-        { "swd",     "Shadow Word: Death", "harmStop" },
-        { "dplague", "Devouring Plague", "harm" },
-        { "shackle", "Shackle Undead", "harm" },
-        { "soothe",  "Mind Soothe", "harm" },
-        { "rez",     "Resurrection", "res" },
-    },
-}
+-- ns.MACROS (every class's set) and ns.EXCLUDED live in Classes.lua.
 
 -- Every body a version of /mom before the _mom names wrote under the plain name (the key), taken from the
 -- git history (two commits that never loaded, ffc7ee8 and 3ca1ad6, wrote nothing). A plain-named
@@ -92,23 +62,76 @@ ns.LEGACY = {
 
 ns.DEFAULTS = {
     version = 2,
-    off = {},               -- [macro key] = true: left out of "/mom install"
+    off = {},               -- [macro key] = true (off) / false (on): the player's switch; nil: the set's default
+    autoSetup = true,       -- make the class's set on a character's first login, and macros for spells learned later
     autoSelfCastOff = true, -- keep the game's Auto Self Cast setting off
     where = "character",    -- new macros: "character" (account when full) or "account"
     owned = {},             -- [macro key] = { name, scope = "account", created }: our account macros
     takeover = true,        -- /macro (and the game menu's Macros) open this window instead of Blizzard's
 }
 ns.CHAR_DEFAULTS = {
-    owned = {},             -- [macro key] = { name, scope = "char", created }: this character's macros of ours
+    owned = {},             -- [macro key] = { name, scope = "char", created, body }: this character's macros of ours
+    made = {},              -- [macro key] = true: /mom made this macro on this character once (never made again on its own)
+    -- auto: nil = first login not handled yet; true = set up by /mom automatically (new spells get macros);
+    -- false = the player had set /mom up here already (left alone)
 }
 
 local db, cdb
-local function Off(key) return db and db.off[key] and true or false end
+
+-- The class's entry for a key (nil for keys of other classes and templates).
+local function Def(key)
+    local _, class = UnitClass("player")
+    for _, m in ipairs(ns.MACROS[class] or {}) do if m[1] == key then return m end end
+end
+ns.Def = Def
+-- Switched off: the player's choice, else the set's default (on unless the entry says on = false).
+local function Off(key)
+    if db and db.off[key] ~= nil then return db.off[key] and true or false end
+    local m = Def(key)
+    return m ~= nil and m.on == false
+end
+ns.Off = Off
+function ns.SetOn(key, on) if db then db.off[key] = not on end end
+
+-- The spell's name in the client's language (from its ID), else the English name in Classes.lua.
+function ns.SpellName(m)
+    local n
+    if m.id then
+        if C_Spell and C_Spell.GetSpellName then n = C_Spell.GetSpellName(m.id)
+        elseif GetSpellInfo then n = GetSpellInfo(m.id) end
+    end
+    if type(n) ~= "string" or n == "" then n = m[2] end
+    return n
+end
+
+-- Does this character know the spell (any rank; a pet's spell in the pet's spellbook)?
+local function Ask(fn, ...)
+    if type(fn) ~= "function" then return false end
+    local ok, r = pcall(fn, ...)
+    return ok and r and true or false
+end
+function ns.Known(m)
+    if not m.id then return true end
+    local SB = C_SpellBook
+    local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank[m.pet and "Pet" or "Player"]
+    if SB and bank ~= nil and Ask(SB.IsSpellKnown, m.id, bank) then return true end
+    if m.pet then
+        if Ask(IsSpellKnown, m.id, true) then return true end
+    elseif Ask(IsPlayerSpell, m.id) or Ask(IsSpellKnown, m.id) then
+        return true
+    end
+    -- a higher rank under the same name (rank 1 dropped from the spellbook)
+    if SB and SB.FindSpellBookSlotForSpell then
+        local ok, slot = pcall(SB.FindSpellBookSlotForSpell, ns.SpellName(m), false, true, false, false)
+        if ok and slot then return true end
+    end
+    return false
+end
 
 local function Marker(key) return "#mom " .. key end
 -- Our text for a macro: the generated body plus the marker line when it fits in 255 characters.
 function ns.Body(m)
-    local body = ns.KINDS[m[3]].body(m[2])
+    local body = ns.KINDS[m[3]].body(ns.SpellName(m))
     local withMarker = body .. "\n" .. Marker(m[1])
     return #withMarker <= MAX_BODY and withMarker or body
 end
@@ -258,7 +281,8 @@ local function Adopt(e, index)
     local name = ns.NewName(e.key)
     local scope = ScopeOf(index)
     EditMacro(index, name, nil, e.body)
-    Record(e.key, name, scope)
+    Record(e.key, name, scope).body = e.body
+    if cdb then cdb.made[e.key] = true end
     return name
 end
 
@@ -267,17 +291,22 @@ end
 ------------------------------------------------------------------------
 -- This class's macros with what the game has:
 -- { key, spell, kind, body, desc, on, macro (our name, or the one a new one gets), index, account, status, clash }
--- status: "ok" (ours, up to date), "differs" (ours, changed by hand), "missing" (we made it, it's gone),
+-- known: the character has the spell; why: the set's reason; default: on by default.
+-- status: "ok" (ours, up to date), "stale" (ours, as an older /mom wrote it: never changed by hand, Update
+-- brings it up to date), "differs" (ours, changed by hand), "missing" (we made it, it's gone),
 -- "legacy" (an old /mom macro under the plain name; renamed on the next change), "new" (never made).
 -- clash: the player has a macro of their own called like the key (never touched).
 function ns.Entries()
     local out = {}
     for _, m in ipairs(ns.MACROS[Class()] or {}) do
-        local e = { key = m[1], spell = m[2], kind = m[3], body = ns.Body(m), desc = ns.KINDS[m[3]].desc, on = not Off(m[1]) }
+        local e = { key = m[1], spell = ns.SpellName(m), kind = m[3], body = ns.Body(m), desc = ns.KINDS[m[3]].desc,
+            on = not Off(m[1]), known = ns.Known(m), why = m.why, default = m.on ~= false, pet = m.pet }
         local index, name, body, rec = ns.Resolve(e.key)
         if index then
             e.index, e.macro, e.account = index, name, rec.scope == "account"
-            e.status = Trim(body) == Trim(e.body) and "ok" or "differs"
+            if Trim(body) == Trim(e.body) then e.status = "ok"
+            elseif (rec.body and Trim(body) == Trim(rec.body)) or ns.OurOldText(m, body) then e.status = "stale"
+            else e.status = "differs" end
         else
             local li = Legacy(e.key)
             if li then
@@ -291,6 +320,21 @@ function ns.Entries()
         out[#out + 1] = e
     end
     return out
+end
+
+-- True when `body` is text some /mom version generated for this spell (any kind, with or without the marker):
+-- ours and never changed by hand, so updating it loses nothing of the player's.
+function ns.OurOldText(m, body)
+    body = Trim(body)
+    local names = { ns.SpellName(m), m[2] }
+    for _, spell in ipairs(names) do
+        for _, kind in pairs(ns.KINDS) do
+            local b = kind.body(spell)
+            if body == b or body == b .. "\n" .. Marker(m[1]) then return true end
+        end
+    end
+    for _, b in ipairs((ns.LEGACY[Class()] or {})[m[1]] or {}) do if body == b then return true end end
+    return false
 end
 
 function ns.Find(key)
@@ -308,6 +352,8 @@ function ns.Install(e)
         local _, _, old = GetMacroInfo(index)
         if Trim(old) ~= Trim(e.body) and ns.PushHistory then ns.PushHistory(ns.GameRef(index), old) end
         EditMacro(index, name, nil, e.body)
+        local _, _, _, rec = ns.Resolve(e.key)
+        if rec then rec.body = e.body end
         return "updated", name
     end
     local li = Legacy(e.key)
@@ -318,7 +364,8 @@ function ns.Install(e)
     local accountRoom = numAccount < MaxAccount()
     local function make(perChar)
         if not CreateMacro(new, QUESTION_MARK, e.body, perChar) then return false end
-        Record(e.key, new, perChar and "char" or "account")
+        Record(e.key, new, perChar and "char" or "account").body = e.body
+        cdb.made[e.key] = true
         return true
     end
     if db.where ~= "account" and charRoom and make(true) then return "created", new end
@@ -344,7 +391,7 @@ end
 ------------------------------------------------------------------------
 -- Combat queue: macros can't be changed in combat; the request runs when combat ends.
 ------------------------------------------------------------------------
-local queue = { keys = {}, all = false, migrate = false, jobs = {} }
+local queue = { keys = {}, all = false, migrate = false, jobs = {}, auto = nil }
 ns.queue = queue
 
 ------------------------------------------------------------------------
@@ -398,7 +445,8 @@ local function InstallOne(e)
     return r
 end
 
--- Create or update every switched-on macro.
+-- Create or update every switched-on macro of a spell you know. Macros of ours you changed by hand are kept
+-- (Update on the macro's own row puts ours back); spells you haven't learned get theirs when you learn them.
 function ns.InstallAll()
     if InCombatLockdown() then
         queue.all = true
@@ -410,10 +458,14 @@ function ns.InstallAll()
         app:Print("no macros defined for " .. tostring(class) .. " yet.")
         return
     end
-    local created, updated, failed, skipped = {}, {}, {}, 0
+    local created, updated, failed, kept, skipped, later = {}, {}, {}, {}, 0, 0
     for _, e in ipairs(ns.Entries()) do
         if not e.on then
             skipped = skipped + 1
+        elseif e.status == "differs" then
+            kept[#kept + 1] = e.key
+        elseif not e.known and not e.index then
+            later = later + 1
         else
             local r = ns.Install(e)
             if r == "created" then created[#created + 1] = e.key
@@ -421,13 +473,121 @@ function ns.InstallAll()
             else failed[#failed + 1] = e.key end
         end
     end
-    app:Print(("created %d, updated %d%s%s. Drag them from /macro or this window to your bars."):format(
+    app:Print(("created %d, updated %d%s%s%s%s. Drag them from /macro or this window to your bars."):format(
         #created, #updated,
         skipped > 0 and (", " .. skipped .. " switched off") or "",
+        later > 0 and (", " .. later .. " for spells you haven't learned yet (made when you learn them)") or "",
+        #kept > 0 and (", kept " .. #kept .. " you changed by hand (" .. table.concat(kept, ", ") .. "; Update on its row puts ours back)") or "",
         #failed > 0 and (", |cffff4040no room (character and account macros full) for: " .. table.concat(failed, ", ") .. "|r") or ""))
     app:Refresh()
-    return created, updated, failed
+    return created, updated, failed, kept
 end
+
+------------------------------------------------------------------------
+-- Automatic set-up: the class's set on a character's first login, and a macro for each spell learned later.
+-- Only character macros (account macros show on every character, and a Paladin's set doesn't belong on your
+-- Mage), always leaving AUTO_RESERVE character slots free for your own. Only macros never made on this
+-- character before: one you deleted is never made again on its own. Nothing of yours is changed.
+------------------------------------------------------------------------
+local AUTO_RESERVE = 3
+ns.AUTO_RESERVE = AUTO_RESERVE
+
+local function FreeCharSlots()
+    local _, numChar = GetNumMacros()
+    return MaxChar() - (numChar or 0)
+end
+ns.FreeCharSlots = FreeCharSlots
+
+-- Was /mom set up on this character before (by hand, or by a version before automatic set-up)?
+local function SetUpBefore()
+    if next(cdb.owned) then return true end
+    for _, m in ipairs(ns.MACROS[Class()] or {}) do
+        if ns.Resolve(m[1]) or Legacy(m[1]) then return true end
+    end
+    return false
+end
+
+-- The macros automatic set-up would make now.
+function ns.AutoCandidates()
+    local out = {}
+    for _, e in ipairs(ns.Entries()) do
+        if e.on and e.known and e.status == "new" and not cdb.made[e.key] then out[#out + 1] = e end
+    end
+    return out
+end
+
+local function Names(list, max)
+    local t = {}
+    for i, e in ipairs(list) do
+        if i > max then t[#t + 1] = "and " .. (#list - max) .. " more" break end
+        t[#t + 1] = e.spell
+    end
+    return table.concat(t, ", ")
+end
+
+-- first: the first-login run (makes the whole set); else a batch of newly learned spells.
+-- Says what it did in one chat line. Returns the entries made and the ones that didn't fit.
+function ns.AutoSetup(first)
+    if not db or not cdb or db.autoSetup == false or not ns.MACROS[Class()] then return end
+    if first then
+        if cdb.auto ~= nil then return end
+    elseif cdb.auto ~= true then
+        return
+    end
+    if InCombatLockdown() then
+        queue.auto = queue.auto or (first and "first" or "learned")
+        return
+    end
+    if first then
+        if SetUpBefore() then cdb.auto = false return end
+        cdb.auto = true
+    end
+    local made, left = {}, {}
+    for _, e in ipairs(ns.AutoCandidates()) do
+        local name = FreeCharSlots() > AUTO_RESERVE and ns.NewName(e.key)
+        if name and CreateMacro(name, QUESTION_MARK, e.body, true) then
+            Record(e.key, name, "char").body = e.body
+            cdb.made[e.key] = true
+            e.macro = name
+            made[#made + 1] = e
+        else
+            left[#left + 1] = e
+        end
+    end
+    local _, numChar = GetNumMacros()
+    local full = #left > 0 and (" |cffffb347%d didn't fit|r (%d of %d character macros used; /mom keeps %d free for yours): %s. "
+        .. "Make them as account macros in /mom."):format(#left, numChar or 0, MaxChar(), AUTO_RESERVE, Names(left, 6)) or ""
+    if first and (#made > 0 or #left > 0) then
+        local className = UnitClass("player")
+        app:Print(("made %d mouseover macro%s for your %s; /mom to change.%s"):format(#made, #made == 1 and "" or "s", tostring(className), full))
+    elseif not first and #made == 1 then
+        app:Print(("made a mouseover macro for %s (%s); /mom to change.%s"):format(made[1].spell, made[1].macro, full))
+    elseif not first and #made > 1 then
+        app:Print(("made %d mouseover macros for new spells: %s; /mom to change.%s"):format(#made, Names(made, 6), full))
+    elseif #left > 0 and not ns.toldFull then
+        ns.toldFull = true -- once per session: a full character list stays full
+        app:Print(("no room for a mouseover macro for %s."):format(Names(left, 6)) .. full)
+    end
+    if #made > 0 then app:Refresh() end
+    return made, left
+end
+
+-- New spells come in bursts (a trainer visit, a level-up): one run, one chat line, a moment after the last.
+local learnPending = false
+function ns.SpellsChanged()
+    if not cdb or cdb.auto ~= true or learnPending then return end
+    learnPending = true
+    local function run() learnPending = false; ns.AutoSetup(false) end
+    if C_Timer and C_Timer.After then C_Timer.After(2, run) else run() end
+end
+
+app:Setting({
+    key = "autosetup", type = "bool", label = "Set up every character automatically",
+    desc = "On a character's first login, make the mouseover macros for the spells it knows (character macros, keeping "
+        .. AUTO_RESERVE .. " free), and one for each spell it learns later. Never touches a macro of yours and never makes one again that you deleted. For all characters.",
+    keywords = { "auto", "first login", "new spells", "learned" },
+    get = function() return db.autoSetup ~= false end, set = function(v) db.autoSetup = v end,
+})
 
 local function RunMigration()
     if InCombatLockdown() then queue.migrate = true return end
@@ -445,6 +605,11 @@ local function RunQueue()
     queue.jobs = {}
     for _, fn in ipairs(jobs) do fn() end
     if queue.migrate then queue.migrate = false; RunMigration() end
+    if queue.auto then
+        local first = queue.auto == "first"
+        queue.auto = nil
+        ns.AutoSetup(first)
+    end
     if queue.all then
         queue.all = false
         wipe(queue.keys)
@@ -510,11 +675,12 @@ local STATUS = {
     missing = "|cffff8a8amissing - you deleted it; Create makes a new one|r",
     legacy = "|cffffd27fold /mom macro - renamed to a _mom name on the next change|r",
     ok = "|cff62cf88ours, up to date|r",
+    stale = "|cffffd27fours, older text - Update brings it up to date|r",
     differs = "|cffffb347ours, changed by hand - Update restores it|r",
 }
 local PLAIN = {
     new = "not created", missing = "missing (deleted), create makes a new one", legacy = "old /mom macro, renamed on the next change",
-    ok = "ours, up to date", differs = "ours, changed by hand; /mom create %s restores it",
+    ok = "ours, up to date", stale = "ours, older text; /mom install updates it", differs = "ours, changed by hand; /mom create %s restores it",
 }
 ns.STATUS = STATUS
 
@@ -542,7 +708,7 @@ end
 app:Command("on", "on <macro>", "include a macro in /mom install", function(rest)
     if SettingInstead(rest, "on") then return end
     local e = NamedEntry(rest, "on")
-    if e then db.off[e.key] = nil; app:Refresh(); app:Print(e.key .. ": on") end
+    if e then db.off[e.key] = false; app:Refresh(); app:Print(e.key .. ": on") end
 end)
 app:Command("off", "off <macro>", "leave a macro out of /mom install", function(rest)
     if SettingInstead(rest, "off") then return end
@@ -579,6 +745,9 @@ f:RegisterEvent("PLAYER_ENTERING_WORLD")
 f:RegisterEvent("UPDATE_MACROS")
 f:RegisterEvent("PLAYER_REGEN_ENABLED")
 f:RegisterEvent("PLAYER_REGEN_DISABLED")
+f:RegisterEvent("SPELLS_CHANGED")
+-- a newly learned spell: this client's event, and the older name on clients that still have it
+for _, ev in ipairs({ "LEARNED_SPELL_IN_SKILL_LINE", "LEARNED_SPELL_IN_TAB" }) do pcall(f.RegisterEvent, f, ev) end
 local migrated
 f:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
@@ -594,8 +763,15 @@ f:SetScript("OnEvent", function(_, event, arg1)
         ApplySelfCast()
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- macros are loaded by now: adopt old plain-named /mom macros once per session
-        if not migrated then migrated = true; RunMigration() end
+        if not migrated then
+            migrated = true
+            RunMigration()
+            -- the first login on this character: its set, a moment later (the spellbook is complete by then)
+            if C_Timer and C_Timer.After then C_Timer.After(1, function() ns.AutoSetup(true) end) else ns.AutoSetup(true) end
+        end
         if ns.OnWorld then ns.OnWorld() end
+    elseif event == "SPELLS_CHANGED" or event == "LEARNED_SPELL_IN_SKILL_LINE" or event == "LEARNED_SPELL_IN_TAB" then
+        ns.SpellsChanged()
     elseif event == "UPDATE_MACROS" then
         app:Refresh()
     elseif event == "PLAYER_REGEN_DISABLED" then

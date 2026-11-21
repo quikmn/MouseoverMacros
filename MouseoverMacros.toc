@@ -10,6 +10,7 @@
 
 Libs\LibStub\LibStub.lua
 Libs\EverlookUI\EverlookUI.lua
+Classes.lua
 MouseoverMacros.lua
 Manager.lua
 Window.lua

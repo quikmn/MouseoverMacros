@@ -399,24 +399,27 @@ end)
 ------------------------------------------------------------------------
 -- Templates: the class's mouseover set and a few common ones
 ------------------------------------------------------------------------
-local BUTTON = { new = "Create", missing = "Create", legacy = "Adopt", differs = "Update", ok = "Up to date" }
+local BUTTON = { new = "Create", missing = "Create", legacy = "Adopt", differs = "Update", stale = "Update", ok = "Up to date" }
 
 app:Section("templates", "Templates", function(stack)
-    UI.Header(stack, "Mouseover set", "Switched-on macros are made by \"Create / update all\". /mom only ever changes the _mom macros it made itself; your own macros are never touched.")
+    UI.Header(stack, "Mouseover set", "Every spell of your class that is worth a mouseover macro. Switched-on ones for spells you know are made by \"Create / update all\" (and on a character's first login, see Options); spells you learn later get theirs then. /mom only ever changes the _mom macros it made itself; your own macros are never touched.")
     UI.ButtonRow(stack, {
         { label = "Create / update all", width = 180, style = "accent", onClick = function() ns.InstallAll() end,
             desc = "Every switched-on macro. Ours are edited in place, so your action bars keep working." },
-        { label = "All on", width = 90, onClick = function() ns.db.off = {}; app:Refresh() end },
+        { label = "All on", width = 90, onClick = function()
+            for _, e in ipairs(ns.Entries()) do ns.SetOn(e.key, true) end
+            app:Refresh()
+        end },
         { label = "All off", width = 90, onClick = function()
-            for _, e in ipairs(ns.Entries()) do ns.db.off[e.key] = true end
+            for _, e in ipairs(ns.Entries()) do ns.SetOn(e.key, false) end
             app:Refresh()
         end },
     })
     UI.List(stack, {
         items = ns.Entries,
         rowHeight = 40,
-        empty = "No mouseover set for your class yet (Priest so far).",
-        toggle = { get = function(e) return e.on end, set = function(e, on) ns.db.off[e.key] = (not on) or nil end },
+        empty = "No mouseover set for your class.",
+        toggle = { get = function(e) return e.on end, set = function(e, on) ns.SetOn(e.key, on) end },
         icon = function(e) return ns.SpellIcon(e.spell) end,
         title = function(e)
             local name = e.index and e.status ~= "legacy" and ("|cffffffff" .. e.macro .. "|r") or ("|cff8d94a3" .. e.macro .. "|r")
@@ -425,10 +428,13 @@ app:Section("templates", "Templates", function(stack)
         -- the state first: the row is too narrow for everything, and the tooltip has the rest
         detail = function(e)
             if e.clash then return "|cffffb347" .. ns.ClashNote(e) .. "|r" end
+            if not e.known and not e.index then return "|cff8d94a3not learned yet - made when you learn it|r" end
             return ns.STATUS[e.status] .. ns.Where(e) .. "  |cff8d94a3-  " .. e.desc .. "|r"
         end,
         tooltip = function(e)
-            local t = { e.key .. " - " .. e.spell, e.desc, ns.STATUS[e.status] .. ns.Where(e),
+            local t = { e.key .. " - " .. e.spell, e.desc .. (e.why and (" (" .. e.why .. ")") or ""),
+                (e.known and "" or "|cff8d94a3Not learned yet.|r ") .. (e.default and "On by default." or "Off by default (situational)."),
+                ns.STATUS[e.status] .. ns.Where(e),
                 "Macro name: " .. e.macro .. (e.index and "" or " (when created)") }
             if e.clash then t[#t + 1] = "|cffffb347" .. ns.ClashNote(e) .. "|r" end
             t[#t + 1] = " "
@@ -812,6 +818,7 @@ app:Section("options", "Options", function(stack)
     app:Widget(stack, "takeover")
     app:Widget(stack, "where")
     app:Widget(stack, "autoselfcast")
+    app:Widget(stack, "autosetup")
     UI.Note(stack, "Slots: the game allows " .. ns.MaxAccount() .. " account macros and " .. ns.MaxChar() .. " per character, 255 characters each; no addon can raise that. Extended macros live in /mom instead and need no slot.")
 end)
 
