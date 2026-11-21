@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.1 (2026-11-21)
 - The addon is now called EverlookDB Macros (was MouseoverMacros): it does more than mouseover macros. Settings, macros, /mom and the folder stay the same.
 - /emacros opens the window too, like /ebar and /epets in the other EverlookDB addons.
 
