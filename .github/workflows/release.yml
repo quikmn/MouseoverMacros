@@ -1,5 +1,5 @@
-# Push a tag like v1.0.0 and this builds EverlookDB-v1.0.0.zip and a GitHub release.
-# WowUp (and other GitHub-aware addon managers) install and update from those releases.
+# Push a tag like v1.0.0 and this builds MouseoverMacros-v1.0.0-forever.zip and a GitHub release, plus a copy named MouseoverMacros.zip
+# so https://github.com/quikmn/MouseoverMacros/releases/latest/download/MouseoverMacros.zip always gets the newest. WowUp uses release.json; the same zip goes to CurseForge.
 name: Release
 
 on:
@@ -19,10 +19,19 @@ jobs:
       - uses: BigWigsMods/packager@v2
         env:
           GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+      - name: Same zip under a fixed name (direct download link on everlookdb.com)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp .release/MouseoverMacros-${GITHUB_REF_NAME}-forever.zip .release/MouseoverMacros.zip
+          gh release upload "$GITHUB_REF_NAME" .release/MouseoverMacros.zip --clobber
       - name: Release notes from CHANGELOG.md (GitHub release page)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p .release
           bash .github/release-notes.sh "$GITHUB_REF_NAME" > .release/notes.md
           gh release edit "$GITHUB_REF_NAME" --notes-file .release/notes.md
+      - name: Upload to CurseForge (project 1821555, WoW Forever)
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+        run: bash .github/curseforge-upload.sh 1821555 .release/MouseoverMacros-${GITHUB_REF_NAME}-forever.zip MouseoverMacros.toc
