@@ -3,7 +3,7 @@
 ## Notes: /mom: your macros - mouseover sets, extended macros past the slot limits, backups, export/import, and a ring menu on the middle mouse button.
 ## Author: quikmn
 ## X-License: GPL-3.0
-## Version: 0.3.1
+## Version: 0.3.2
 ## SavedVariables: MouseoverMacrosDB
 ## SavedVariablesPerCharacter: MouseoverMacrosCharDB
 ## IconTexture: Interface\AddOns\MouseoverMacros\Media\icon
