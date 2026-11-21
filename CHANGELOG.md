@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.2.1 (2026-11-21)
 - Shadow Word: Death first stops whatever you are casting or channeling (Mind Flay, a heal), then fires at the mouseover enemy, else your target. Run /mom install (or press Install) to update a Shadow Word: Death macro /mom already made.
 
 ## v0.2.0 (2026-11-20)
