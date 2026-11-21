@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Mages now get mouseover macros for Fireball, Frostbolt, Fire Blast, Arcane Missiles and the wand (Shoot) by default, next to Polymorph and Arcane Intellect. Each casts on the enemy under your mouse, else on your target. Characters set up before get them at the next login; switch any off in /mom.
+
 ## v0.3.1 (2026-11-21)
 - The addon is now called EverlookDB Macros (was MouseoverMacros): it does more than mouseover macros. Settings, macros, /mom and the folder stay the same.
 - /emacros opens the window too, like /ebar and /epets in the other EverlookDB addons.

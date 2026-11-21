@@ -125,9 +125,13 @@ ns.MACROS = {
         { "polycow", "Polymorph: Cow", "harm", id = 28270, on = false, why = "a look of Polymorph" },
         { "amplify", "Amplify Magic", "help", id = 1008, on = false, why = "situational buff" },
         { "dampen",  "Dampen Magic", "help", id = 604, on = false, why = "situational buff" },
-        { "fblast",  "Fire Blast", "harm", id = 2136, on = false, why = "damage; usually your target" },
-        { "frostbolt", "Frostbolt", "harm", id = 116, on = false, why = "damage; usually your target" },
-        { "fireball", "Fireball", "harm", id = 133, on = false, why = "damage; usually your target" },
+        -- The owner's choice (2026-11-21): a mage's main damage spells and the wand are on by default. The
+        -- macro casts on the enemy under the mouse, else on your target, so it never does worse than the plain spell.
+        { "fblast",  "Fire Blast", "harm", id = 2136, on = true, why = "instant damage" },
+        { "frostbolt", "Frostbolt", "harm", id = 116, on = true, why = "damage" },
+        { "fireball", "Fireball", "harm", id = 133, on = true, why = "damage" },
+        { "amissiles", "Arcane Missiles", "harm", id = 5143, on = true, why = "damage" },
+        { "wand",    "Shoot", "harm", id = 5019, on = true, why = "wand" },
         { "scorch",  "Scorch", "harm", id = 2948, on = false, why = "damage; usually your target" },
         { "icelance", "Ice Lance", "harm", id = 1312002, on = false, why = "talent; damage" },
     },
