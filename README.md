@@ -55,12 +55,19 @@ Macros can't be changed in combat: anything you ask for then waits and happens w
 
 ## The mouseover set
 
-- Friendly spells: mouseover, then friendly target. Never yourself.
-- Hostile spells: mouseover, then target.
-- Dispel Magic, Penance: mouseover, then target, friend or enemy.
+Every class has one: the spells worth a mouseover macro, from levels 1 to 60 and every spec (Classes.lua; the reasoning per spell is in the research notes). Warrior 11, Paladin 26, Hunter 11, Rogue 5, Priest 41, Shaman 15, Mage 12, Warlock 27, Druid 24; most are on by default, situational ones (and plain nukes) are listed but off.
+
+- Friendly spells (heals, shields, dispels, buffs, blessings, Innervate, Power Infusion): mouseover, then friendly target. Never yourself.
+- Hostile spells (DoTs, curses, interrupts, crowd control, taunts, Hunter's Mark, Purge): mouseover, then target.
+- Either side (Dispel Magic, Penance, Holy Shock, Mind Vision, Devour Magic): mouseover, then target, friend or enemy.
+- Resurrections: mouseover corpse, then dead target.
+- Left out: self-only spells, stances, forms, auras, totems, ground spells, pet-only spells and buffs that are raid-wide in Forever.
+- A macro is only made for a spell you know; talent spells appear when you learn them. Spells are cast by name without a rank (always your best rank), in your client's language.
 - Turns off the game's Auto Self Cast setting on every login.
 
-Classes covered so far: Priest.
+**Every character set up automatically:** on a character's first login (one where /mom was never set up), /mom makes the switched-on macros for the spells it knows, as character macros, and says so in one chat line ("made 14 mouseover macros for your Paladin; /mom to change"). It always leaves 3 character slots free for your own and never uses account macros for this (they would show up on all your characters); what didn't fit is named in that line. Spells you learn later get their macro too, one chat line per batch. A macro you deleted is never made again on its own, and your own macros are never touched. Characters you had already set up are left as they are (Create / update all adds the new ones there). Switch it off for all characters under Options ("Set up every character automatically", `/mom off autosetup`).
+
+**Create / update all** makes or updates the switched-on macros for spells you know. A macro of ours you changed by hand is kept (its row's Update puts ours back); one still exactly as an older /mom wrote it is brought up to date.
 
 ## License
 

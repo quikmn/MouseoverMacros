@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+- Every class now has a mouseover set, not only priests: Warrior, Paladin, Hunter, Rogue, Shaman, Mage, Warlock and Druid, with the spells that make sense as a mouseover macro (heals, buffs, dispels and resurrections on a friend; DoTs, curses, interrupts, crowd control and taunts on an enemy; Holy Shock and Dispel Magic on either). Self-only spells, stances, forms, auras, totems and ground spells are left out. None of them ever falls back to casting on you.
+- The first time you log in on a character, /mom makes the mouseover macros for the spells it knows and says so in one chat line. It uses character macro slots only, always leaves 3 free for your own, and names what didn't fit. Characters you had already set up are left as they were. Switch it off under Options ("Set up every character automatically").
+- When you learn a new spell (at a trainer or from a talent), its mouseover macro is made too, with one chat line per batch. If you delete one of these macros, it is never made again. In combat it waits until the fight ends.
+- Each macro uses the spell's name in your game's language and always casts your highest rank.
+- New priest macros: Greater Heal, Power Infusion, Prayer of Mending, Contingency Plan, Silence, Vampiric Embrace, Starshards, Chastise and Shadowfiend. Also Holy Fire, Mind Flay, Mana Burn, Mind Control, Mind Vision and Hex of Weakness, which are off by default.
+- Prayer of Fortitude, Prayer of Spirit and Prayer of Shadow Protection are now off by default, because WoW Forever made them raid-wide and the target is ignored. Macros you already have stay.
+- The mouseover set shows which spells you haven't learned yet ("made when you learn it"). Create / update all skips those, and keeps any macro of ours that you changed by hand.
+
 ## v0.2.1 (2026-11-21)
 - Shadow Word: Death first stops whatever you are casting or channeling (Mind Flay, a heal), then fires at the mouseover enemy, else your target. Run /mom install (or press Install) to update a Shadow Word: Death macro /mom already made.
 
