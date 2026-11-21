@@ -6,7 +6,7 @@
 ## Version: 0.2.1
 ## SavedVariables: MouseoverMacrosDB
 ## SavedVariablesPerCharacter: MouseoverMacrosCharDB
-## IconTexture: Interface\Icons\Spell_Holy_Renew
+## IconTexture: Interface\AddOns\MouseoverMacros\Media\icon
 
 Libs\LibStub\LibStub.lua
 Libs\EverlookUI\EverlookUI.lua
