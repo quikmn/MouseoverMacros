@@ -636,6 +636,15 @@ ns.TEMPLATES = {
         body = "#showtooltip Shoot\n/cast [@mouseover,harm,nodead][harm,nodead] !Shoot" },
     { id = "ifheal", title = "Inner Focus + Greater Heal", desc = "Inner Focus, then Greater Heal on the mouseover friend, else your friendly target.", class = "PRIEST",
         body = "#showtooltip Greater Heal\n/cast Inner Focus\n/cast [@mouseover,help,nodead][help,nodead] Greater Heal" },
+    -- one button, two jobs: the friend under the mouse gets the first spell, else the mouseover enemy or your target the second
+    { id = "mbheal", title = "Mind Blast / Heal rank 1", desc = "Heal (rank 1) on the friend under the mouse; else Mind Blast on the mouseover enemy or your target.", class = "PRIEST",
+        body = "#showtooltip\n/cast [@mouseover,help,nodead] Heal(Rank 1); [@mouseover,harm,nodead][harm,nodead] Mind Blast" },
+    { id = "smfheal", title = "Smite / Flash Heal rank 1", desc = "Flash Heal (rank 1) on the friend under the mouse; else Smite on the mouseover enemy or your target.", class = "PRIEST",
+        body = "#showtooltip\n/cast [@mouseover,help,nodead] Flash Heal(Rank 1); [@mouseover,harm,nodead][harm,nodead] Smite" },
+    { id = "dppi", title = "Devouring Plague / Power Infusion", desc = "Power Infusion on the friend under the mouse; else Devouring Plague on the mouseover enemy or your target.", class = "PRIEST",
+        body = "#showtooltip\n/cast [@mouseover,help,nodead] Power Infusion; [@mouseover,harm,nodead][harm,nodead] Devouring Plague" },
+    { id = "swprenew", title = "Shadow Word: Pain / Renew", desc = "Renew on the friend under the mouse; else Shadow Word: Pain on the mouseover enemy or your target.", class = "PRIEST",
+        body = "#showtooltip\n/cast [@mouseover,help,nodead] Renew; [@mouseover,harm,nodead][harm,nodead] Shadow Word: Pain" },
 }
 
 function ns.Templates()
