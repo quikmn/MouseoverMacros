@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Resurrection macros (Resurrection, Redemption, Ancestral Spirit, Rebirth, Revive): with no corpse under the mouse or targeted, the spell's hand comes up so you can click a body on the ground.
+
 ## v0.3.3 (2026-11-21)
 - Drag macros straight onto your action bars: drag any macro's row in the lists, or the big icon on the Edit page (a click on that icon picks it up too). Pick up still works.
 

@@ -192,11 +192,12 @@ CASES.sets = function()
 				check(b:find("@mouseover", 1, true), e.key .. " has no mouseover")
 				if e.key ~= "poh" then -- the owner's own exception (Prayer of Healing heals the target's party, else yours)
 					check(not b:find("@player", 1, true) and not b:find("target=player", 1, true) and not b:find("@self", 1, true)
-						and not b:find("[]", 1, true), class .. " " .. e.key .. " casts on you:\n" .. e.body)
+						and (e.kind == "res" or not b:find("[]", 1, true)), class .. " " .. e.key .. " casts on you:\n" .. e.body)
 				end
 				if e.kind == "help" then check(b:find("[@mouseover,help,nodead][help,nodead]", 1, true), e.key .. " help conditions") end
 				if e.kind == "harm" then check(b:find("[@mouseover,harm,nodead][harm,nodead]", 1, true), e.key .. " harm conditions") end
-				if e.kind == "res" then check(b:find("[@mouseover,help,dead][help,dead]", 1, true), e.key .. " res conditions") end
+				-- res ends in [] (the hand cursor for a body on the ground): you can't res yourself, so it never lands on you
+				if e.kind == "res" then check(b:find("[@mouseover,help,dead][help,dead][] ", 1, true), e.key .. " res conditions") end
 				if e.kind == "any" then check(b:find("[@mouseover,exists,nodead][exists,nodead]", 1, true), e.key .. " any conditions") end
 				check(not b:find("rank", 1, true), e.key .. " names a rank")
 			end

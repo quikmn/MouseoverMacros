@@ -34,9 +34,10 @@ ns.KINDS = {
     -- and with no one else that's your own).
     helpOrSelf = { desc = "mouseover friend, else friendly target, else you",
         body = function(spell) return "#showtooltip " .. spell .. "\n/cast [@mouseover,help,nodead][help,nodead][@player] " .. spell end },
-    -- Res: mouseover corpse, else dead target.
-    res = { desc = "mouseover corpse, else dead target",
-        body = function(spell) return "#showtooltip " .. spell .. "\n/cast [@mouseover,help,dead][help,dead] " .. spell end },
+    -- Res: mouseover corpse, else dead target, else the spell's hand cursor to click a body on the ground (someone
+    -- who released leaves only their corpse there). Never yourself.
+    res = { desc = "mouseover corpse, else dead target, else click a body on the ground",
+        body = function(spell) return "#showtooltip " .. spell .. "\n/cast [@mouseover,help,dead][help,dead][] " .. spell end },
 }
 
 -- ns.MACROS (every class's set) and ns.EXCLUDED live in Classes.lua.
@@ -56,7 +57,7 @@ ns.LEGACY = {
         dispel = { L(H, "Dispel Magic"), L(A, "Dispel Magic") }, -- the first version had it friendly-only
         penance = { L(A, "Penance") }, swp = { L(X, "Shadow Word: Pain") }, smite = { L(X, "Smite") },
         mblast = { L(X, "Mind Blast") }, dplague = { L(X, "Devouring Plague") }, shackle = { L(X, "Shackle Undead") },
-        rez = { L(R, "Resurrection") },
+        rez = { L(R, "Resurrection"), L(R .. "[]", "Resurrection") },
     },
 }
 
