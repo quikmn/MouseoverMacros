@@ -642,7 +642,9 @@ ns.TEMPLATES = {
     { id = "smfheal", title = "Smite / Flash Heal rank 1", desc = "Flash Heal (rank 1) on the friend under the mouse; else Smite on the mouseover enemy or your target.", class = "PRIEST",
         body = "#showtooltip\n/cast [@mouseover,help,nodead] Flash Heal(Rank 1); [@mouseover,harm,nodead][harm,nodead] Smite" },
     { id = "dppi", title = "Devouring Plague / Power Infusion", desc = "Power Infusion on the friend under the mouse; else Devouring Plague on the mouseover enemy or your target.", class = "PRIEST",
-        body = "#showtooltip\n/cast [@mouseover,help,nodead] Power Infusion; [@mouseover,harm,nodead][harm,nodead] Devouring Plague" },
+        body = "#showtooltip\n/mom pi\n/cast [@mouseover,help,nodead] Power Infusion; [@mouseover,harm,nodead][harm,nodead] Devouring Plague; [help,nodead] Power Infusion" },
+    { id = "pifun", title = "Power Infusion + a funny whisper", desc = "Power Infusion on the friend under the mouse, else your friendly target, and a funny whisper to them.", class = "PRIEST",
+        body = "#showtooltip Power Infusion\n/mom pi\n/cast [@mouseover,help,nodead][help,nodead] Power Infusion" },
     { id = "swprenew", title = "Shadow Word: Pain / Renew", desc = "Renew on the friend under the mouse; else Shadow Word: Pain on the mouseover enemy or your target.", class = "PRIEST",
         body = "#showtooltip\n/cast [@mouseover,help,nodead] Renew; [@mouseover,harm,nodead][harm,nodead] Shadow Word: Pain" },
 }

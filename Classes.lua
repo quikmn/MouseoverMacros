@@ -41,7 +41,7 @@ ns.MACROS = {
         { "soothe",  "Mind Soothe", "harm", id = 453, on = true, why = "pull past a pack" },
         { "rez",     "Resurrection", "res", id = 2006, on = true, why = "resurrect" },
         { "gheal",   "Greater Heal", "help", id = 2060, on = true, why = "big heal" },
-        { "pinf",    "Power Infusion", "help", id = 10060, on = true, why = "talent: buff a caster friend" },
+        { "pinf",    "Power Infusion", "help", id = 10060, on = true, why = "talent: buff a caster friend; whispers them a funny line", pre = "/mom pi" },
         { "contplan", "Contingency Plan", "help", id = 1277462, on = true, why = "Forever: ward an ally" },
         { "pom",     "Prayer of Mending", "help", id = 401859, on = true, why = "talent: put on the one taking damage" },
         { "silence", "Silence", "harm", id = 15487, on = true, why = "talent: interrupt" },

@@ -13,6 +13,7 @@ Libs\EverlookUI\EverlookUI.lua
 Classes.lua
 MouseoverMacros.lua
 Manager.lua
+PowerInfusion.lua
 Window.lua
 RingData.lua
 Ring.lua

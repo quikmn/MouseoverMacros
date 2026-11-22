@@ -141,6 +141,7 @@ local function Marker(key) return "#mom " .. key end
 -- Our text for a macro: the generated body plus the marker line when it fits in 255 characters.
 function ns.Body(m)
     local body = ns.KINDS[m[3]].body(ns.SpellName(m))
+    if m.pre then body = body:gsub("\n", "\n" .. m.pre .. "\n", 1) end   -- an extra line before the /cast
     local withMarker = body .. "\n" .. Marker(m[1])
     return #withMarker <= MAX_BODY and withMarker or body
 end

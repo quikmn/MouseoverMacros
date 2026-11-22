@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Power Infusion whispers a funny line to whoever gets it (the friend under the mouse, else your friendly target). Once a minute per person at most, only when it's ready, never to yourself. In the Power Infusion macro, the Devouring Plague / Power Infusion template (now also on a friendly target) and a new "Power Infusion + a funny whisper" template. /mom pi does it from any macro.
+
 ## v0.3.7 (2026-11-22)
 - Priest templates, one button for two jobs (the friend under the mouse, else the enemy): Mind Blast / Heal rank 1, Smite / Flash Heal rank 1, Devouring Plague / Power Infusion, Shadow Word: Pain / Renew.
 

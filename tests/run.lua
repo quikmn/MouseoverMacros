@@ -1348,6 +1348,34 @@ step("priest heal ranks: their own macros, off by default, exact rank only", fun
 	check(ns.Body(by.healr2):find("%[@mouseover,help,nodead%]%[help,nodead%] %w+%(Rank 2%)"), ns.Body(by.healr2))
 end)
 
+step("Power Infusion whisper: the PI target only, never you or an enemy, once a minute each", function()
+	local saved = { UnitExists, UnitIsDeadOrGhost, UnitCanAssist, UnitCanAttack, UnitIsUnit, UnitIsPlayer, GetUnitName, SendChatMessage, GetTime }
+	local units, sent, now = {}, {}, 1000
+	UnitExists = function(u) return units[u] ~= nil end
+	UnitIsDeadOrGhost = function() return false end
+	UnitCanAssist = function(_, u) return units[u] == "friend" end
+	UnitCanAttack = function(_, u) return units[u] == "enemy" end
+	UnitIsUnit = function(a, b) return a == b end
+	UnitIsPlayer = function(u) return units[u] ~= nil end
+	GetUnitName = function(u) return u == "mouseover" and "Bob-Realm" or "Ann" end
+	SendChatMessage = function(text, kind, _, to) sent[#sent + 1] = { text, kind, to } end
+	GetTime = function() return now end
+	units = { mouseover = "friend", target = "enemy" }
+	check(ns.PIUnit() == "mouseover" and ns.PISay(), "mouseover friend")
+	check(sent[1][2] == "WHISPER" and sent[1][3] == "Bob-Realm" and sent[1][1]:find("Bob", 1, true) and not sent[1][1]:find("Realm", 1, true), "whisper to Bob")
+	check(not ns.PISay() and #sent == 1, "twice within a minute")
+	units = { mouseover = "enemy", target = "friend" }
+	check(ns.PIUnit() == nil, "an enemy under the mouse gets the other spell")
+	units = { target = "friend" }
+	check(ns.PIUnit() == "target" and ns.PISay() and sent[2][3] == "Ann", "friendly target")
+	units = { target = "enemy" }
+	check(ns.PIUnit() == nil and not ns.PISay(), "enemy target")
+	local by = {}
+	for _, m in ipairs(ns.MACROS.PRIEST) do by[m[1]] = m end
+	check(ns.Body(by.pinf):find("^#showtooltip [^\n]+\n/mom pi\n/cast "), ns.Body(by.pinf))
+	UnitExists, UnitIsDeadOrGhost, UnitCanAssist, UnitCanAttack, UnitIsUnit, UnitIsPlayer, GetUnitName, SendChatMessage, GetTime = unpack(saved)
+end)
+
 step("the Mine list names what each _mom macro casts", function()
 	local W = ns.WhatItDoes
 	check(W("#showtooltip\n/cast [@mouseover,help,nodead][help,nodead] Abolish Disease\n#mom x") == "Abolish Disease", "mouseover heal")
