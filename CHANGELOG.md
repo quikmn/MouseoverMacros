@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.9 (2026-11-22)
 - Priest: the Cure Disease macro casts Abolish Disease once you know it. One slot for both, and it's already on your bars.
 - In combat, Pick up and dragging a macro open the game's own macro window to drag it from, with one short line in chat instead of a line per try.
 
