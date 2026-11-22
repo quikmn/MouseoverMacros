@@ -2,7 +2,7 @@
 -- character right now (best food in the bags, known profession spells ...), and the direction maths.
 --
 -- db.ring.top: 8 compass slots, 1 = up, then clockwise (3 = right, 5 = down, 7 = left); false = empty.
--- A slot is one slice ({ kind = "spell" | "item" | "macro" | "ext" | "equipset" | <dynamic> }) or a
+-- A slot is one slice ({ kind = "spell" | "item" | "macro" | "equipset" | <dynamic> }) or a
 -- sub-ring ({ kind = "ring", name, items = { slice, ... } }), whose items open around the cursor.
 local _, ns = ...
 local R = {}
@@ -364,10 +364,6 @@ function R.Describe(s)
         return "item " .. (it and it.name or ("#" .. tostring(s.id)))
     end
     if s.kind == "macro" then return "macro " .. tostring(s.name) end
-    if s.kind == "ext" then
-        local x = ns.db and ns.db.ext[s.id]
-        return "extended macro " .. (x and x.name or ("#" .. tostring(s.id)))
-    end
     if s.kind == "equipset" then return "equipment set " .. tostring(s.name) end
     return tostring(s.kind)
 end
@@ -397,11 +393,6 @@ function R.Expand(s, ctx)
         if not s.name or not GetMacroIndexByName or (GetMacroIndexByName(s.name) or 0) == 0 then return {} end
         local _, icon = GetMacroInfo(GetMacroIndexByName(s.name))
         return { { label = s.name, icon = icon or ns.QUESTION_MARK, macro = s.name } }
-    end
-    if s.kind == "ext" then
-        local x = ns.db and ns.db.ext[s.id]
-        if not x then return {} end
-        return { { label = x.name, icon = x.icon or ns.QUESTION_MARK, macrotext = "/click MoMX_" .. s.id .. " LeftButton 1" } }
     end
     if s.kind == "equipset" then
         local icon

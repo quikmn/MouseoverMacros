@@ -362,41 +362,67 @@ step("combat: nothing touched, the request is queued and runs when combat ends",
 	check(ns.queue.all == false and next(ns.queue.keys) == nil, "queue not emptied")
 end)
 
-step("the window list: names, states, Create / Update / Pick up buttons", function()
-	ns.app:Open("templates")
-	local list
-	for _, w in ipairs(ns.app.sections.templates.stack.widgets) do if w.rows and not list then list = w end end
-	check(list and #list.rows == 56, "56 rows")
-	local smite, dplague
-	for _, r in ipairs(list.rows) do
-		if r.item.key == "smite" then smite = r end
-		if r.item.key == "dplague" then dplague = r end
+-- Rows of a list now shown (the Macros list unless another is given).
+local function shownRows(list)
+	list = list or ns.macroList
+	local out = {}
+	for _, r in ipairs(list.rows) do if r.item ~= nil and r:IsShown() then out[#out + 1] = r end end
+	return out
+end
+local function rowFor(pred, list) for _, r in ipairs(shownRows(list)) do if pred(r.item) then return r end end end
+local function click(b) b:GetScript("OnClick")(b) end
+local function typeInto(box, text)
+	box:SetText(text)
+	box:GetScript("OnTextChanged")(box, true)
+end
+local function searchFor(text) typeInto(ns.macroSearch, text) end   -- the Macros list's search
+local function quickFor(text) typeInto(ns.quickSearch, text) end    -- the quick picks' search
+-- A game macro by name (account or character), as the window sees it.
+local function named(name) return ns.Fresh({ kind = "game", scope = "account", name = name }) or ns.Fresh({ kind = "game", scope = "char", name = name }) end
+local function template(id) for _, t in ipairs(ns.TEMPLATES) do if t.id == id then return t end end end
+-- The text of a note on the editor's side saying `s`.
+local function editorSays(s)
+	for _, w in ipairs(ns.editStack.widgets) do
+		if w.text and (w.text:GetText() or ""):find(s, 1, true) then return true end
 	end
+end
+
+step("quick picks: the set and the templates, with Create / Update / Put on bar, drag and the switches", function()
+	ns.app:Open("templates") -- the old page: the mouseover builder and its quick picks
+	check(ns.app.current == "builder", "templates did not open the builder: " .. tostring(ns.app.current))
+	local list = ns.quickList
+	local rows = shownRows(list)
+	check(#rows == #ns.Entries() + #ns.Templates(), "rows: " .. #rows)
+	local smite = rowFor(function(it) return it.e and it.e.key == "smite" end, list)
+	local dplague = rowFor(function(it) return it.e and it.e.key == "dplague" end, list)
+	check(smite.switch:IsShown(), "the on/off switch")
 	check(smite.buttons[1]:GetText() == "Up to date" and smite.buttons[2]:IsShown(), "existing macro row")
 	check(smite.title:GetText():find(entry("smite").macro, 1, true), "row shows the macro name")
-	smite.buttons[2]:GetScript("OnClick")(smite.buttons[2])
-	check(MOCK.picked == GetMacroIndexByName(entry("smite").macro), "pick up")
-	-- in combat the game blocks PickupMacro: the button greys out, the tooltip says "after combat", a click does nothing
+	click(smite.buttons[2])
+	check(MOCK.picked == GetMacroIndexByName(entry("smite").macro), "Put on bar")
+	MOCK.picked = nil
+	smite:GetScript("OnDragStart")(smite)
+	check(MOCK.picked == GetMacroIndexByName(entry("smite").macro), "drag a quick pick onto a bar")
+	-- in combat the game blocks PickupMacro: the game's macro window opens instead, one line, nothing queued
 	MOCK.picked = nil
 	local realShow, opened = ns.ShowBlizzardMacros, 0
 	ns.ShowBlizzardMacros = function() opened = opened + 1 end
 	MOCK.combat = true
 	MOCK.Fire("PLAYER_REGEN_DISABLED")
-	check(smite.buttons[2]:GetAlpha() == 1, "Pick up stays usable in combat (it opens the game's macro window)")
-	smite.buttons[2]:GetScript("OnClick")(smite.buttons[2])
-	check(MOCK.picked == nil, "PickupMacro called in combat")
-	ns.PickUp(ns.List("account")[1] or { kind = "game", id = 1 })
-	check(MOCK.picked == nil, "ns.PickUp in combat")
-	check(opened > 0, "Pick up in combat opens the game's macro window")
+	local jobs = #ns.queue.jobs
+	click(smite.buttons[2])
+	check(MOCK.picked == nil and opened > 0 and logHas("Put on bar works after combat"), "Put on bar in combat: " .. last())
+	ns.PickUp(ns.List("account")[1])
+	check(MOCK.picked == nil and #ns.queue.jobs == jobs, "ns.PickUp in combat picked up or queued")
 	ns.ShowBlizzardMacros = realShow
 	MOCK.combat = false
 	MOCK.Fire("PLAYER_REGEN_ENABLED")
-	check(smite.buttons[2]:GetAlpha() == 1, "Pick up back after combat")
 	DeleteMacro(GetMacroIndexByName(entry("dplague").macro))
 	MOCK.Fire("UPDATE_MACROS")
+	ns.app:Refresh()
 	check(dplague.buttons[1]:GetText() == "Create" and not dplague.buttons[2]:IsShown(), "missing macro row")
-	check(dplague.detail:GetText():find("missing", 1, true), "missing state shown")
-	dplague.buttons[1]:GetScript("OnClick")(dplague.buttons[1])
+	check(dplague.detail:GetText():find("missing", 1, true), "missing state shown: " .. dplague.detail:GetText())
+	click(dplague.buttons[1])
 	check(entry("dplague").status == "ok", "Create button")
 	dplague.switch:GetScript("OnMouseDown")(dplague.switch)
 	check(MouseoverMacrosDB.off.dplague, "row switch")
@@ -422,60 +448,48 @@ C_Item.GetItemInfoInstant = function(x) if x == "Hearthstone" then return 6948 e
 GetMacroIcons = function(t) for _, v in ipairs({ 135953, 136000, "Spell_Holy_Renew", "INV_Misc_Bag_07" }) do t[#t + 1] = v end end
 GetMacroItemIcons = function(t) t[#t + 1] = 133784 end
 
-step("every section of the window opens", function()
-	for _, id in ipairs({ "mine", "account", "char", "ext", "templates", "edit", "backups", "ring", "options" }) do
+step("every page opens; the sidebar is Macros, Mouseover builder, Ring, Backups, Options; old pages land on Macros", function()
+	for _, id in ipairs({ "macros", "builder", "backups", "ring", "options" }) do
 		ns.app:Open(id)
-		check(ns.app.sections[id].stack, id .. " not built")
+		check(ns.app.current == id and ns.app.sections[id].stack, id .. " not built")
 	end
-	check(#ns.app.order == 9 and ns.app.order[1] == "mine" and ns.app.order[8] == "ring" and ns.app.order[9] == "options", "sidebar order")
-	check(ns.CountsLine():find("Account", 1, true) and ns.CountsLine():find("Extended", 1, true), "counts line")
+	for _, id in ipairs({ "mine", "account", "char", "ext", "edit", "list" }) do
+		ns.app:Open(id)
+		check(ns.app.current == "macros", id .. " -> " .. tostring(ns.app.current))
+	end
+	local o = ns.app.order
+	check(table.concat(o, ",") == "macros,builder,ring,backups,options", "sidebar order: " .. table.concat(o, ","))
+	local nav = ns.app.window.navButtons
+	check(nav.macros:IsShown() and nav.builder:IsShown() and nav.ring:IsShown(), "sidebar buttons")
+	local line = ns.CountsLine()
+	check(line:find("Account", 1, true) and line:find("Character", 1, true) and not line:find("Extended", 1, true), "counts line: " .. line)
 	ns.app:Close()
 end)
 
-step("extended macros: no slot, a secure button, 1023 characters, key binding, bar macro", function()
-	local a0, c0 = GetNumMacros()
-	local long = "#showtooltip Renew\n" .. ("/cast Renew\n"):rep(80)
-	check(#long > 255 and #long <= 1023, "test text length")
-	local ok, msg, id = ns.CreateExt("Big renew", 135953, long)
-	check(ok and id == 1, "create: " .. tostring(msg))
-	local a1, c1 = GetNumMacros()
-	check(a0 == a1 and c0 == c1, "an extended macro took a slot")
-	local b = _G.MoMX_1
-	check(b and b:GetAttribute("type") == "macro" and b:GetAttribute("macrotext") == long, "secure button")
-	check(b:GetAttribute("useOnKeyDown") == true and #b.__clicks == 1 and b.__clicks[1] == "AnyDown", "acts once, on the press")
-	check(not ns.CreateExt("Too long", nil, ("x"):rep(1024)), "1024 accepted")
-	check(not ns.CreateExt("", nil, "/say hi"), "empty name accepted")
-	ok = ns.SaveExt(ns.ExtRef(1), "Big renew", 135953, "#showtooltip Renew\n/cast [@mouseover,help,nodead][help,nodead] Renew")
-	check(ok and b:GetAttribute("macrotext"):find("mouseover", 1, true), "save")
-	check(#ns.History(ns.ExtRef(1)) == 1 and ns.History(ns.ExtRef(1))[1].body == long, "history kept the old text")
-	ok = ns.BindExt(ns.ExtRef(1), "CTRL-1")
-	check(ok and MOCK.bindings["CTRL-1"] == "MoMX_1" and MouseoverMacrosCharDB.binds[1] == "CTRL-1", "binding")
-	local ok2, msg2, index = ns.ExtToBar(ns.ExtRef(1))
-	check(ok2 and index, "bar macro: " .. tostring(msg2))
-	local bar = ns.GameRef(index)
-	check(isMom(bar.name) and bar.body:find("\n/click MoMX_1 LeftButton 1\n#mom x1$") and bar.body:find("^#showtooltip Renew"), "bar macro body: " .. bar.body)
-	check(ns.Cost(ns.ExtRef(1)):find(bar.name, 1, true), "cost names the bar macro")
-	ns.SaveExt(ns.ExtRef(1), "Big renew", 135953, "#showtooltip Heal\n/cast Heal")
-	check(ns.Fresh(bar).body:find("^#showtooltip Heal"), "bar macro follows the tooltip line")
-	check(#ns.List("ext") == 1 and #ns.List("mine") > 20, "lists")
-end)
-
-step("extended macros in combat: queued, applied after", function()
-	MOCK.combat = true
-	local ok, msg = ns.SaveExt(ns.ExtRef(1), "Big renew", 135953, "/cast Renew")
-	check(ok and msg == "queued" and last():find("in combat", 1, true), "combat reply: " .. last())
-	check(_G.MoMX_1:GetAttribute("macrotext") == "#showtooltip Heal\n/cast Heal", "changed in combat")
-	MOCK.combat = false
-	MOCK.Fire("PLAYER_REGEN_ENABLED")
-	check(_G.MoMX_1:GetAttribute("macrotext") == "/cast Renew", "not applied after combat")
-	check(logHas("saved Big renew"), "after-combat report: " .. last())
-end)
-
-step("editor: the player's own macro can be edited here; limits; history and restore", function()
+step("editor: any macro opens next to the list; the player's own can be edited; limits; history and restore", function()
 	local mount = ns.GameRef(GetMacroIndexByName("Mount"))
 	check(not mount.ours, "Mount is not ours")
-	ns.Edit(mount)
-	check(ns.app.current == "edit" and ns.ed.body == "/cast Riding Turtle", "editor loaded")
+	ns.app:Open("macros")
+	searchFor("riding")
+	local row = rowFor(function(it) return it.name == "Mount" end)
+	check(row and row.title:GetText() == "Riding Turtle" and row.detail:GetText():find("Mount", 1, true)
+		and row.detail:GetText():find("character", 1, true), "readable name first, macro name and kind after")
+	click(row)
+	check(ns.app.current == "macros" and ns.ed.ref and ns.ed.ref.name == "Mount" and ns.ed.body == "/cast Riding Turtle", "editor loaded")
+	-- the open macro's row and the editor's icon go onto the bars
+	MOCK.picked = nil
+	row:GetScript("OnDragStart")(row)
+	check(MOCK.picked == GetMacroIndexByName("Mount"), "drag the row")
+	MOCK.picked = nil
+	ns.editorIcon:GetScript("OnDragStart")(ns.editorIcon)
+	check(MOCK.picked == GetMacroIndexByName("Mount"), "drag the editor's icon")
+	MOCK.picked = nil
+	click(ns.putOnBar)
+	check(MOCK.picked == GetMacroIndexByName("Mount"), "Put on bar")
+	MOCK.picked = nil
+	click(row.buttons[1])
+	check(MOCK.picked == GetMacroIndexByName("Mount"), "the row's Put on bar")
+	searchFor("")
 	ns.ed.body = "/cast Riding Turtle\n/say off we go"
 	local ok = ns.EditorSave()
 	check(ok and find("Mount").body == "/cast Riding Turtle\n/say off we go", "saved")
@@ -487,6 +501,12 @@ step("editor: the player's own macro can be edited here; limits; history and res
 	ns.ed.body = ns.History(ns.ed.ref)[1].body
 	ns.EditorSave()
 	check(find("Mount").body == "/cast Riding Turtle", "restore")
+	-- earlier versions are tucked away until opened
+	ns.app:Refresh()
+	check(not ns.historyList:IsShown() and ns.historyToggle:GetText():find("Earlier versions (2)", 1, true), "history folded: " .. ns.historyToggle:GetText())
+	click(ns.historyToggle)
+	check(ns.historyList:IsShown(), "history opens")
+	click(ns.historyToggle)
 	ns.ed.name = "Mount2"
 	ns.EditorSave()
 	check(find("Mount2") and ns.ed.ref.name == "Mount2" and #ns.History(ns.ed.ref) == 2, "rename keeps the history")
@@ -495,20 +515,33 @@ step("editor: the player's own macro can be edited here; limits; history and res
 	check(not find("_mom1234").body:find("#mom", 1, true), "player's _mom1234 untouched")
 end)
 
-step("a new macro from the editor: character, account, extended", function()
-	ns.EditNew("account") -- the insert above is not saved: it asks
+step("a new macro: a character slot, else an account one (and says why); both full: says so plainly, makes nothing", function()
+	ns.EditNew() -- the insert above is not saved: it asks
 	answer("discard")
+	check(ns.ed.ref == nil and ns.ed.as == "char", "a new macro starts as a character macro")
+	check(editorSays("it goes to an account slot (character macros are full)"), "the editor says where it goes")
 	ns.ed.name, ns.ed.body = "Hearth", "/use Hearthstone"
-	check(ns.EditorSave() and ns.ed.ref and ns.ed.ref.scope == "account", "account macro")
-	ns.EditNew("char")
-	ns.ed.name, ns.ed.body = "CharOne", "/say hi"
 	local ok, msg = ns.EditorSave()
-	check(not ok and msg:find("character macros are full", 1, true), "full character reply: " .. tostring(msg))
-	ns.EditNew("ext")
-	answer("discard") -- CharOne could not be saved: it asks before dropping it
-	ns.ed.name, ns.ed.body = "ExtOne", "/say hi"
-	check(ns.EditorSave() and ns.ed.ref.kind == "ext", "extended")
-	check(ns.EditorSave(true) and ns.ed.ref.kind == "ext" and #ns.List("ext") == 3, "save as copy")
+	check(ok and ns.ed.ref and ns.ed.ref.scope == "account", "character full: account: " .. tostring(msg))
+	check(msg:find("character macros are full", 1, true) and ns.ed.status.text:find("account macro", 1, true), "says why: " .. msg)
+	ns.EditNew("account")
+	ns.ed.name, ns.ed.body = "AccOne", "/say hi"
+	check(ns.EditorSave() and ns.ed.ref.scope == "account", "account macro")
+	check(ns.EditorSave(true) and ns.ed.ref.name == "AccOne 2" and named("AccOne"), "save as copy: " .. ns.ed.ref.name)
+	-- every slot used: one plain line, nothing made, never somewhere hidden
+	local saveA = macros.account
+	macros.account = {}
+	for i = 1, 120 do macros.account[i] = saveA[i] or { name = "acc" .. i, body = "/say " .. i } end
+	ns.EditNew()
+	ns.ed.name, ns.ed.body = "NoSlot", "/say none"
+	ok, msg = ns.EditorSave()
+	check(not ok and msg:find("no free macro slot", 1, true) and msg:find("Delete one first", 1, true) and not named("NoSlot"), "both full: " .. tostring(msg))
+	check(editorSays("no free macro slot"), "the editor doesn't say there is no slot")
+	macros.account = saveA
+	ns.app:Close()
+	answer("discard")
+	ns.DeleteGame(named("AccOne 2"))
+	ns.DeleteGame(named("AccOne"))
 end)
 
 step("move to account / character respects the slot limits; ours keeps its record", function()
@@ -518,57 +551,64 @@ step("move to account / character respects the slot limits; ours keeps its recor
 	check(ok and find("MyHeal") and GetMacroIndexByName("MyHeal") <= 120, "moved: " .. tostring(msg))
 	check(MouseoverMacrosDB.owned.heal and MouseoverMacrosDB.owned.heal.scope == "account" and not MouseoverMacrosCharDB.owned.heal, "record moved")
 	check(entry("heal").status == "ok", "still ours")
-	-- back: character has a free slot now
 	ok = ns.MoveGame(ns.Fresh({ kind = "game", scope = "account", name = "MyHeal" }), "char")
 	check(ok, "moved back")
-	ok, msg = ns.MoveGame(ns.Fresh({ kind = "game", scope = "account", name = "Hearth" }), "char")
+	ok, msg = ns.MoveGame(named("Hearth"), "char")
 	check(not ok and msg:find("no room", 1, true), "full move: " .. tostring(msg))
+	-- the editor's "Stored as" moves the open macro
+	ns.Edit(named("Hearth"))
+	ns.EditorMove("char")
+	check(named("Hearth").scope == "account" and logHas("no room"), "Stored as moved it into a full list")
+	ns.app:Close()
 end)
 
-step("delete asks twice, goes to the bin, restores", function()
-	ns.Edit(ns.Fresh({ kind = "game", scope = "account", name = "Hearth" }))
-	local row
-	for _, w in ipairs(ns.app.sections.edit.stack.widgets) do
-		if w.buttons and #w.buttons == 5 then row = w end
-	end
-	local del = row.buttons[5]
-	del:GetScript("OnClick")(del)
-	check(find("Hearth"), "deleted on the first click")
-	del:GetScript("OnClick")(del)
-	check(not find("Hearth"), "not deleted on the second click")
+step("delete: one click, into the bin, the editor starts a new macro; Undo on the list puts it back; Backups restores", function()
+	ns.Edit(named("Hearth"))
+	local del = ns.saveRow.buttons[4]
+	check(del:GetText() == "Delete", "Delete button: " .. tostring(del:GetText()))
+	click(del)
+	check(not find("Hearth"), "not deleted on the first click")
 	check(MouseoverMacrosDB.bin[1].name == "Hearth", "not in the bin")
+	check(ns.app.current == "macros" and ns.ed.ref == nil and ns.ed.as == "account", "the editor still holds the deleted macro")
+	check(last():find("deleted Hearth", 1, true) and last():find("/mom undo", 1, true), "chat: " .. last())
+	check(ns.Status() and ns.undoButton:GetParent():IsShown() and ns.statusNote.text:GetText():find("Deleted Hearth", 1, true), "status line with Undo")
+	click(ns.undoButton)
+	check(find("Hearth") and find("Hearth").body == "/use Hearthstone", "undo")
+	check(not ns.Status() and not ns.undoButton:GetParent():IsShown(), "Undo still shown")
+	check(not MouseoverMacrosDB.bin[1] or MouseoverMacrosDB.bin[1].name ~= "Hearth", "undo left it in the bin")
+	SlashCmdList.MOUSEOVERMACROS("undo")
+	check(last():find("nothing to undo", 1, true), "second undo: " .. last())
+	ns.DeleteMacros({ named("Hearth") })
+	check(not find("Hearth"), "ns.DeleteMacros")
 	ns.app:Open("backups")
 	local list
 	for _, w in ipairs(ns.app.sections.backups.stack.widgets) do if w.rows and not list then list = w end end
-	list.rows[1].buttons[1]:GetScript("OnClick")(list.rows[1].buttons[1])
+	click(list.rows[1].buttons[1])
 	check(find("Hearth") and find("Hearth").body == "/use Hearthstone", "restore from the bin")
-	-- deleting an extended macro takes its bar macro and key with it
-	local barName = ns.ExtBarMacro(1).name
-	check(ns.DeleteExt(ns.ExtRef(1)), "delete ext")
-	check(not find(barName) and MOCK.bindings["CTRL-1"] == nil and not MouseoverMacrosDB.ext[1], "ext leftovers")
+	ns.app:Close()
 end)
 
-step("export / import round trip; nothing replaced", function()
+step("export / import round trip; nothing replaced; an older export's extended ones become macros", function()
 	local odd = "#showtooltip\n/say a|b; c, d 100%\n/cast Renew"
-	local _, _, id = ns.CreateExt("Odd one", "Spell_Holy_Renew", odd)
-	local text = ns.Export({ ns.ExtRef(id), ns.Fresh({ kind = "game", scope = "account", name = "Hearth" }) })
+	check(ns.CreateGame("account", "Odd one", "Spell_Holy_Renew", odd), "made")
+	local text = ns.Export({ named("Odd one"), named("Hearth") })
 	check(text:match("^MOM1\n") and not text:find("|", 1, true), "export text: " .. text)
 	local list = assert(ns.ParseExport(text))
 	check(#list == 2 and list[1].body == odd and list[1].icon == "Spell_Holy_Renew" and list[2].kind == "a", "parse")
-	local nExt = #ns.List("ext")
-	local ok, msg = ns.Import(list, "x")
-	check(ok and #ns.List("ext") == nExt + 2, "import as extended: " .. tostring(msg))
-	ok = ns.Import({ list[2] })
+	local ok, msg = ns.Import({ list[2] })
 	check(ok and find("Hearth 2") and find("Hearth").body == "/use Hearthstone", "taken name numbered, original kept")
+	ok, msg = ns.Import({ { kind = "x", name = "OldExt", icon = 134400, body = "/say old" }, { kind = "x", name = "TooLong", body = ("x"):rep(300) } })
+	check(ok and named("OldExt") and named("OldExt").scope == "account" and msg:find("not made: TooLong", 1, true), "an old extended import: " .. tostring(msg))
 	check(not ns.ParseExport("hello"), "garbage accepted")
-	-- the window buttons
 	ns.app:Open("backups")
 	local exportRow
 	for _, w in ipairs(ns.app.sections.backups.stack.widgets) do
 		if w.buttons and w.buttons[1]:GetText() == "Export" then exportRow = w end
 	end
-	exportRow.buttons[1]:GetScript("OnClick")(exportRow.buttons[1])
+	click(exportRow.buttons[1])
 	check(ns.exportBox:GetText():match("^MOM1"), "export button")
+	ns.app:Close()
+	for _, n in ipairs({ "Odd one", "Hearth 2", "OldExt" }) do ns.DeleteGame(named(n)) end
 end)
 
 step("line check: unknown spells, #showtooltip placement, slots and sequences", function()
@@ -579,9 +619,18 @@ step("line check: unknown spells, #showtooltip placement, slots and sequences", 
 	check(#p == 3, "problems:\n" .. s)
 	check(s:find('3:"Renwe"', 1, true) and s:find("4:#showtooltip only", 1, true) and s:find('7:"Smiite"', 1, true), s)
 	check(#ns.CheckLines(("x"):rep(300), 255) == 1, "length")
+	-- the editor's live check
+	ns.EditNew()
+	ns.ed.name, ns.ed.body = "Check", "#showtooltip\n/cast Renwe"
+	ns.app:Refresh()
+	check(editorSays("24 / 255 characters") and editorSays('line 2:'), "live check")
+	ns.EditorRevert()
+	ns.app:Refresh()
+	check(editorSays("every spell and item name checks out"), "a clean text")
+	ns.app:Close()
 end)
 
-step("templates: a _mom macro (updated, not duplicated) or an extended one", function()
+step("templates: a _mom macro, updated, never duplicated", function()
 	local t = ns.Templates()[1]
 	check(t.id == "trinkets", "first template")
 	local ok, msg = ns.MakeTemplate(t)
@@ -590,11 +639,11 @@ step("templates: a _mom macro (updated, not duplicated) or an extended one", fun
 	local before = GetNumMacros()
 	ns.MakeTemplate(t)
 	check(GetNumMacros() == before and select(2, ns.Resolve("t:trinkets")) == name, "duplicated")
-	local nExt = #ns.List("ext")
-	check(ns.MakeTemplate(t, true) and #ns.List("ext") == nExt + 1, "extended template")
 	local ids = {}
 	for _, x in ipairs(ns.Templates()) do ids[x.id] = true end
-	check(ids.wand and ids.ifheal, "priest templates")
+	check(ids.wand and ids.ifheal and ids.dpfheal and ids.dppi, "priest templates")
+	check(template("dpfheal").body == "#showtooltip\n/cast [@mouseover,help,nodead] Flash Heal(Rank 1); [@mouseover,harm,nodead][harm,nodead] Devouring Plague; [help,nodead] Flash Heal(Rank 1)",
+		"the Devouring Plague / Flash Heal rank 1 text")
 end)
 
 step("icon search: ? first, file names and IDs", function()
@@ -603,11 +652,11 @@ step("icon search: ? first, file names and IDs", function()
 	local r = ns.SearchIcons("renew")
 	check(r[1] == 134400 and r[2] == "Spell_Holy_Renew" and #r == 2, "by name")
 	check(#ns.SearchIcons("1359") == 2, "by ID")
-	ns.EditNew("ext")
+	ns.EditNew()
 	ns.ed.picking = true
 	ns.app:Refresh()
 	check(ns.picker:IsShown(), "picker shown")
-	ns.picker.cells[2]:GetScript("OnClick")(ns.picker.cells[2])
+	click(ns.picker.cells[2])
 	check(ns.ed.icon == 135953 and not ns.ed.picking, "pick an icon")
 	ns.app:Close() -- a new icon is a change: closing asks
 	check(ns.app:IsShown(), "closed with an unsaved icon")
@@ -615,20 +664,175 @@ step("icon search: ? first, file names and IDs", function()
 	check(not ns.app:IsShown() and ns.ed.icon == 134400, "discard did not close and revert")
 end)
 
-step("extended macros come back after a reload: buttons and bindings", function()
-	local _, _, id = ns.CreateExt("Bound", nil, "/say bound")
-	ns.BindExt(ns.ExtRef(id), "F5")
-	_G["MoMX_" .. id]:SetAttribute("macrotext", nil)
-	wipe(MOCK.bindings)
+step("extended macros of 0.3.9 become normal macros at login: bars edited in place, keys named, ring slices, the bin", function()
+	local db, cdb = MouseoverMacrosDB, MouseoverMacrosCharDB
+	local BIG = "#showtooltip Renew\n/cast [@mouseover,help,nodead][help,nodead] Renew"
+	db.ext = {
+		[1] = { name = "Big renew", icon = 135953, body = BIG },
+		[2] = { name = "Hearth X", body = "/use Hearthstone" },
+		[3] = { name = "Huge", body = "/say " .. ("x"):rep(400) },
+	}
+	db.extNext = 4
+	db.history.x1 = { { t = 1, body = "/cast Renew" } }
+	db.owned.x1 = { name = "_mom5555", scope = "account" }
+	cdb.binds = { [1] = "CTRL-1", [3] = "F5" }
+	-- Big renew is on the bars twice (two bar macros); Huge once
+	check(CreateMacro("_mom5555", 134400, "#showtooltip Renew\n/click MoMX_1 LeftButton 1\n#mom x1", false), "bar 1")
+	check(CreateMacro("_mom5556", 134400, "#showtooltip\n/click MoMX_1\n#mom x1", false), "bar 2")
+	check(CreateMacro("_mom5557", 134400, "/click MoMX_3 LeftButton 1\n#mom x3", false), "bar 3")
+	local barIndex = GetMacroIndexByName("_mom5555")
+	db.ring.top[2] = { kind = "ext", id = 2 }
+	local sub = db.ring.top[3]
+	local nItems = #sub.items
+	sub.items[#sub.items + 1] = { kind = "ext", id = 3 }
+	-- in combat: waits
+	MOCK.combat = true
 	MOCK.Fire("PLAYER_ENTERING_WORLD")
-	check(_G["MoMX_" .. id]:GetAttribute("macrotext") == "/say bound" and MOCK.bindings.F5 == "MoMX_" .. id, "not restored")
+	check(db.ext and db.ext[1] and find("_mom5555"), "changed in combat")
+	MOCK.log = {}
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	check(db.ext == nil and db.extNext == nil, "the extended table is still there")
+	local big = named("Big renew")
+	check(big and big.index == barIndex and big.body == BIG and big.icon == 135953, "the bar macro was not turned into it in place")
+	check(not find("_mom5556") and not find("_mom5557"), "the second bar macro and Huge's are left over")
+	check(named("Hearth X") and named("Hearth X").scope == "account", "no bar: made in an account slot")
+	check(db.bin[1].name == "Huge" and #db.bin[1].body > 255, "Huge not in the bin")
+	check(logHas("kept in the bin under Backups") and logHas("Huge (405 characters"), "Huge not named in chat")
+	check(logHas("2 became normal macros (Big renew, Hearth X)"), "summary line")
+	check(logHas("key bindings on this character are gone: CTRL-1, F5"), "keys line")
+	check(cdb.binds == nil and db.owned.x1 == nil and db.history.x1 == nil, "leftovers")
+	check(#ns.History(big) == 1 and ns.History(big)[1].body == "/cast Renew", "history moved")
+	check(db.ring.top[2].kind == "macro" and db.ring.top[2].name == "Hearth X", "ring slice: " .. tostring(db.ring.top[2].kind))
+	check(#sub.items == nItems, "the binned one's ring slice is still there")
+	check(db.extMoved[1].name == "Big renew", "moved record")
+	for _, m in pairs(all()) do check(not m.body:find("MoMX_", 1, true), "a /click MoMX_ macro is left: " .. m.name) end
+	-- a second login changes nothing
+	local before = edits
+	MOCK.Fire("PLAYER_ENTERING_WORLD")
+	check(edits == before, "migrated twice")
+	-- another character's bar macro for it: turned into the macro there too
+	local saved = macros.char[18]
+	macros.char[18] = { name = "_mom7777", icon = 134400, body = "#showtooltip\n/click MoMX_1 LeftButton 1\n#mom x1" }
+	MOCK.Fire("PLAYER_ENTERING_WORLD")
+	check(macros.char[18].body == BIG and macros.char[18].name == "Big renew", "another character's bar: " .. macros.char[18].name)
+	macros.char[18] = saved
+	db.ring.top[2] = false
+	ns.Ring.Rebuild()
+	ns.DeleteGame(named("Hearth X"))
+	ns.DeleteGame(named("Big renew"))
+end)
+
+step("mouseover builder: the text for a friend, an enemy or both; ranks; options; a short name; never a self cast", function()
+	local B = ns.BuildMouseover
+	local body, name = B({ friend = "Flash Heal", friendRank = 1, enemy = "Devouring Plague" })
+	check(body == template("dpfheal").body, "both: " .. tostring(body))
+	check(name == "DP / FH r1", "name: " .. tostring(name))
+	body, name = B({ friend = "Power Infusion", enemy = "Devouring Plague" })
+	check(body == template("dppi").body and name == "DP / PI", "Power Infusion: the whisper line: " .. body)
+	check(not B({ friend = "Power Infusion", enemy = "Devouring Plague", whisper = false }):find("/mom pi", 1, true), "whisper off")
+	body, name = B({ friend = "Renew" })
+	check(body == "#showtooltip Renew\n/cast [@mouseover,help,nodead][help,nodead] Renew" and name == "Renew", "friend only: " .. body)
+	body, name = B({ enemy = "Shadow Word: Pain", fallback = false, stop = true })
+	check(body == "#showtooltip Shadow Word: Pain\n/stopcasting\n/cast [@mouseover,harm,nodead] Shadow Word: Pain" and name == "SWP", "enemy only, no fallback: " .. body .. " / " .. name)
+	body = B({ friend = "Flash Heal", enemy = "Smite", fallback = false })
+	check(body == "#showtooltip\n/cast [@mouseover,help,nodead] Flash Heal; [@mouseover,harm,nodead] Smite", "both, no fallback: " .. body)
+	body, name = B({ friend = "Heal", friendRank = 2 })
+	check(body:find("Heal(Rank 2)", 1, true) and name == "Heal r2", "a rank: " .. name)
+	check(B({}) == nil and B({ friend = "", enemy = "" }) == nil, "nothing picked")
+	for _, o in ipairs({ { friend = "Heal" }, { enemy = "Smite" }, { friend = "Heal", enemy = "Smite" }, { friend = "Heal", enemy = "Smite", fallback = false } }) do
+		local t = B(o)
+		check(not t:find("@player", 1, true) and not t:find("target=player", 1, true) and #t <= 255, "a self cast: " .. t)
+	end
+end)
+
+MOCK.book = { { "Flash Heal", "Rank 7" }, { "Flash Heal", "Rank 1" }, { "Devouring Plague", "Rank 6" }, { "Power Infusion", "" },
+	{ "Spirit Tap", "Passive", true }, { "Renew", "Rank 10" } }
+C_SpellBook = {
+	GetNumSpellBookSkillLines = function() return 1 end,
+	GetSpellBookSkillLineInfo = function() return { itemIndexOffset = 0, numSpellBookItems = #MOCK.book } end,
+	GetSpellBookItemInfo = function(slot)
+		local b = MOCK.book[slot]
+		if b then return { name = b[1], subName = b[2], spellID = 9000 + slot, iconID = 3000 + slot, isPassive = b[3] or false } end
+	end,
+}
+
+step("mouseover builder page: spells from the spellbook with their ranks, a suggested name; Create saves it and puts it on the cursor", function()
+	local book = ns.SpellBook()
+	local names = {}
+	for _, s in ipairs(book) do names[#names + 1] = s.name .. ":" .. tostring(s.rank) end
+	check(table.concat(names, ",") == "Devouring Plague:6,Flash Heal:7,Power Infusion:nil,Renew:10", "spellbook: " .. table.concat(names, ","))
+	ns.app:Open("builder")
+	check(ns.builderCreate:GetAlpha() < 1, "Create usable with nothing picked")
+	local f, e = ns.builderFriend, ns.builderEnemy
+	typeInto(f.box, "flash")
+	local rows = shownRows(f.list)
+	check(f.list:IsShown() and #rows == 1 and rows[1].item.name == "Flash Heal" and rows[1].title:GetText():find("Rank 7", 1, true), "friend picker")
+	click(rows[1])
+	check(ns.bd.friend == "Flash Heal" and not f.list:IsShown() and f.box:GetText() == "Flash Heal", "picked")
+	typeInto(e.box, "devour")
+	click(shownRows(e.list)[1])
+	check(ns.bd.enemy == "Devouring Plague", "enemy picked")
+	ns.bd.friendRank = 1 -- the rank dropdown
+	ns.app:Refresh()
+	check(ns.BuiltName() == "DP / FH r1" and ns.builderCreate:GetAlpha() == 1, "suggested name: " .. tostring(ns.BuiltName()))
+	-- Create: the character list is full, so an account slot; on the cursor at once
+	MOCK.picked = nil
+	local a0 = #macros.account
+	MOCK.log = {}
+	click(ns.builderCreate)
+	local m = named("DP / FH r1")
+	check(m and m.scope == "account" and #macros.account == a0 + 1 and m.body == template("dpfheal").body, "not made")
+	check(MOCK.picked == m.index and last():find("on your cursor", 1, true), "not on the cursor: " .. last())
+	-- again: a new macro under a numbered name, nothing replaced
+	click(ns.builderCreate)
+	check(named("DP / FH r1 2") and named("DP / FH r1").body == m.body, "second Create")
+	-- in combat: said at once, made once after combat
+	MOCK.combat = true
+	click(ns.builderCreate)
+	check(last():find("will be made when combat ends", 1, true) and not named("DP / FH r1 3"), "combat: " .. last())
+	check(ns.builderCreate:GetText() == "Cancel", "Create while it waits: " .. ns.builderCreate:GetText())
+	click(ns.builderCreate)
+	check(last():find("cancelled", 1, true), "cancel: " .. last())
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	check(not named("DP / FH r1 3"), "made although cancelled")
+	MOCK.combat = true
+	click(ns.builderCreate)
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	check(named("DP / FH r1 3") and not named("DP / FH r1 4") and ns.builderCreate:GetText() == "Create", "after combat")
+	-- every slot used: says so plainly, makes nothing
+	local saveA = macros.account
+	macros.account = {}
+	for i = 1, 120 do macros.account[i] = saveA[i] or { name = "acc" .. i, body = "/say " .. i } end
+	click(ns.builderCreate)
+	check(last():find("no free macro slot", 1, true) and last():find("Delete one first", 1, true), "both full: " .. last())
+	macros.account = saveA
+	-- a typed name wins over the suggestion
+	ns.bd.name = "Mine"
+	check(ns.BuiltName() == "Mine", "typed name")
+	ns.bd.name = ""
+	check(ns.BuiltName() == "DP / FH r1", "an empty name goes back to the suggestion")
+	for _, n in ipairs({ "DP / FH r1", "DP / FH r1 2", "DP / FH r1 3" }) do ns.DeleteGame(named(n)) end
+	ns.bd.friend, ns.bd.enemy, ns.bd.friendRank = nil, nil, nil
+	-- the editor's Insert spell: a spell from the spellbook into the text
+	ns.EditNew()
+	ns.app:Refresh()
+	typeInto(ns.insertSpell.box, "renew")
+	local r = shownRows(ns.insertSpell.list)[1]
+	check(r and r.item.name == "Renew" and r.buttons[2]:IsShown(), "insert picker")
+	click(r.buttons[1])
+	check(ns.ed.body:find("Renew", 1, true) and not ns.insertSpell.list:IsShown(), "Insert: " .. ns.ed.body)
+	ns.EditorRevert()
+	ns.app:Close()
 end)
 
 step("help, list, settings and unknown commands", function()
 	MOCK.log = {}
 	SlashCmdList.MOUSEOVERMACROS("help")
 	local s = table.concat(MOCK.log, "\n")
-	for _, c in ipairs({ "install", "create <macro>", "on <macro>", "off <macro>", "list" }) do
+	for _, c in ipairs({ "install", "create <macro>", "on <macro>", "off <macro>", "list", "undo", "new", "build" }) do
 		check(s:find("/mom " .. c, 1, true), "help lacks " .. c)
 	end
 	MOCK.log = {}
@@ -639,6 +843,11 @@ step("help, list, settings and unknown commands", function()
 	SlashCmdList.MOUSEOVERMACROS("bogus")
 	check(last():find("/mom help", 1, true), "unknown reply")
 	check(last():find("EverlookDB Macros|r: ", 1, true), "chat prefix: " .. last())
+	SlashCmdList.MOUSEOVERMACROS("build")
+	check(ns.app:IsShown() and ns.app.current == "builder", "/mom build")
+	SlashCmdList.MOUSEOVERMACROS("new account")
+	check(ns.app.current == "macros" and ns.ed.ref == nil and ns.ed.as == "account", "/mom new account")
+	ns.app:Close()
 end)
 
 step("the name is EverlookDB Macros; /emacros is an alias of /mom", function()
@@ -678,34 +887,18 @@ step("every button row on every page fits the page width", function()
 	for _, id in ipairs(ns.app.order) do
 		ns.app:Open(id)
 		local st = ns.app.sections[id].stack
-		for _, e in ipairs(st.entries) do
-			local f = e.frame
-			if f and f.buttons and not f.rows then
-				local w = 0
-				for i, b in ipairs(f.buttons) do w = w + b:GetWidth() + (i > 1 and 8 or 0) end
-				check(w <= st.width, ("%s: a row of buttons is %d px on a %d px page"):format(id, w, st.width))
+		for _, sub in ipairs(st.stacks or { st }) do
+			for _, e in ipairs(sub.entries) do
+				local f = e.frame
+				if f and f.buttons and not f.rows then
+					local w = 0
+					for i, b in ipairs(f.buttons) do w = w + b:GetWidth() + (i > 1 and 8 or 0) end
+					check(w <= sub.width, ("%s: a row of buttons is %d px on a %d px page"):format(id, w, sub.width))
+				end
 			end
 		end
 	end
 	ns.app:Close()
-end)
-
-step("Set key: closing the window cancels it, so a later key press is not bound", function()
-	local _, _, id = ns.CreateExt("KeyTest", nil, "/say key")
-	ns.Edit(ns.ExtRef(id))
-	ns.keyCapture:Show()
-	ns.app:Close()
-	check(not ns.keyCapture:IsShown(), "capture still armed after closing the window")
-	check(not MouseoverMacrosCharDB.binds[id], "bound")
-	-- a key already in use says what it replaces
-	GetBindingAction = function(k) if k == "W" then return "MOVEFORWARD" end return "" end
-	BINDING_NAME_MOVEFORWARD = "Move Forward"
-	local ok, msg = ns.BindExt(ns.ExtRef(id), "W")
-	check(ok and msg:find("instead of Move Forward", 1, true), "bind reply: " .. tostring(msg))
-	ok, msg = ns.BindExt(ns.ExtRef(id), "F9")
-	check(ok and not msg:find("instead", 1, true), "free key reply: " .. tostring(msg))
-	GetBindingAction, BINDING_NAME_MOVEFORWARD = nil, nil
-	ns.DeleteExt(ns.ExtRef(id))
 end)
 
 step("the ring's key: when it takes over a key in use, says once what it replaced and how to change it", function()
@@ -719,7 +912,6 @@ step("the ring's key: when it takes over a key in use, says once what it replace
 	check(said == 1, "told " .. said .. " times")
 	check(logHas("/mom ring key <key>"), "says how to change it")
 	check(ns.ringReplaces == "Move and Steer", "the Ring page shows it")
-	-- a free key: nothing said
 	GetBindingAction = function() return "" end
 	n = #MOCK.log
 	ns.ApplyBindings()
@@ -728,106 +920,45 @@ step("the ring's key: when it takes over a key in use, says once what it replace
 	GetBindingAction, BINDING_NAME_MOVEANDSTEER = nil, nil
 end)
 
--- The first button row on a page whose first button reads `label`.
-local function rowWith(section, label)
-	for _, w in ipairs(ns.app.sections[section].stack.widgets) do
-		if w.buttons and w.buttons[1] and w.buttons[1]:GetText() == label then return w end
-	end
-end
-
-step("Set key: a second click cancels (one chat line each); modifier keys alone are never bound", function()
-	local _, _, id = ns.CreateExt("KeyTwice", nil, "/say key")
-	ns.Edit(ns.ExtRef(id))
-	local row = rowWith("edit", "Set key")
-	check(row, "no Set key row")
-	local set = row.buttons[1]
-	local n = #MOCK.log
-	set:GetScript("OnClick")(set)
-	check(ns.keyCapture:IsShown() and set:GetText() == "Press a key...", "not waiting: " .. tostring(set:GetText()))
-	set:GetScript("OnClick")(set)
-	check(not ns.keyCapture:IsShown() and set:GetText() == "Set key", "second click did not cancel")
-	check(#MOCK.log - n == 2 and last():find("key not changed", 1, true), "chat lines: " .. (#MOCK.log - n))
-	set:GetScript("OnClick")(set)
-	local press = ns.keyCapture:GetScript("OnKeyDown")
-	for _, k in ipairs({ "LSHIFT", "RCTRL", "LALT", "LMETA", "RMETA" }) do press(ns.keyCapture, k) end
-	check(ns.keyCapture:IsShown() and not MouseoverMacrosCharDB.binds[id], "a modifier alone was taken")
-	press(ns.keyCapture, "F7")
-	check(not ns.keyCapture:IsShown() and MouseoverMacrosCharDB.binds[id] == "F7" and set:GetText() == "Set key", "F7 not bound")
-	-- combat starts while it waits: the keyboard is given back at once, nothing bound
-	set:GetScript("OnClick")(set)
-	check(ns.keyCapture:IsShown(), "waiting again")
-	MOCK.combat = true
-	MOCK.Fire("PLAYER_REGEN_DISABLED")
-	check(not ns.keyCapture:IsShown(), "still holds the keyboard in combat")
-	check(last():find("combat started", 1, true), "says why: " .. last())
-	-- and in combat it doesn't start waiting
-	set:GetScript("OnClick")(set)
-	check(not ns.keyCapture:IsShown() and last():find("after combat", 1, true), "Set key in combat")
-	-- Escape with unsaved changes in combat: left to the game (no question on top of the Game Menu)
-	ns.ed.body = "/say changed"
-	local onKey = ns.app.window:GetScript("OnKeyDown")
-	onKey(ns.app.window, "ESCAPE")
-	check(not LibStub("EverlookUI-1").IsPopupShown(), "asked about unsaved changes in combat")
-	MOCK.combat = false
-	MOCK.Fire("PLAYER_REGEN_ENABLED")
-	ns.ed.body = "/say key"
-	ns.app:Close()
-	ns.DeleteExt(ns.ExtRef(id))
-end)
-
-step("delete in the editor: a fresh editor of the same kind; the macro's history goes with it", function()
-	local _, _, id = ns.CreateExt("DelMe", nil, "/say one")
-	ns.SaveExt(ns.ExtRef(id), "DelMe", nil, "/say two")
-	check(#ns.History(ns.ExtRef(id)) == 1, "history")
-	ns.Edit(ns.ExtRef(id))
-	local row
-	for _, w in ipairs(ns.app.sections.edit.stack.widgets) do
-		if w.buttons and #w.buttons == 5 then row = w end
-	end
-	row.buttons[5]:GetScript("OnClick")(row.buttons[5])
-	row.buttons[5]:GetScript("OnClick")(row.buttons[5])
-	check(not MouseoverMacrosDB.ext[id], "not deleted")
-	check(ns.ed.ref == nil and ns.ed.as == "ext" and ns.ed.body == "#showtooltip\n" and ns.ed.name == "", "editor kept the deleted text")
-	check(MouseoverMacrosDB.history["x" .. id] == nil, "history of a deleted macro kept")
+step("delete in the editor: a fresh editor of the same kind", function()
+	check(ns.CreateGame("account", "DelMe", nil, "/say one"), "made")
+	ns.SaveGame(named("DelMe"), "DelMe", nil, "/say two")
+	check(#ns.History(named("DelMe")) == 1, "history")
+	ns.Edit(named("DelMe"))
+	click(ns.saveRow.buttons[4])
+	check(not named("DelMe"), "not deleted")
+	check(ns.ed.ref == nil and ns.ed.as == "account" and ns.ed.body == "#showtooltip\n" and ns.ed.name == "", "editor kept the deleted text")
 	ns.app:Close()
 end)
 
 step("restore from the bin in combat: waits, then restores and leaves the bin", function()
-	local _, _, id = ns.CreateExt("BinMe", nil, "/say bin")
-	ns.DeleteExt(ns.ExtRef(id))
+	check(ns.CreateGame("account", "BinMe", nil, "/say bin"), "made")
+	ns.DeleteGame(named("BinMe"))
 	check(MouseoverMacrosDB.bin[1].name == "BinMe", "in the bin")
 	ns.app:Open("backups")
 	local list
 	for _, w in ipairs(ns.app.sections.backups.stack.widgets) do if w.rows and not list then list = w end end
 	MOCK.combat = true
-	list.rows[1].buttons[1]:GetScript("OnClick")(list.rows[1].buttons[1])
+	click(list.rows[1].buttons[1])
 	check(MouseoverMacrosDB.bin[1].name == "BinMe", "left the bin in combat")
 	MOCK.combat = false
 	MOCK.Fire("PLAYER_REGEN_ENABLED")
 	check(MouseoverMacrosDB.bin[1] == nil or MouseoverMacrosDB.bin[1].name ~= "BinMe", "still in the bin after combat")
-	local found
-	for _, r in ipairs(ns.List("ext")) do if r.name == "BinMe" then found = true end end
-	check(found, "not restored after combat")
+	check(named("BinMe"), "not restored after combat")
+	ns.DeleteGame(named("BinMe"))
 	ns.app:Close()
 end)
 
-local function extNamed(name)
-	local out = {}
-	for _, r in ipairs(ns.List("ext")) do if r.name == name then out[#out + 1] = r end end
-	return out
-end
-
 step("unsaved changes: another macro, New, another page, x, Escape and /mom ask Save / Discard / Cancel", function()
-	local _, _, other = ns.CreateExt("Other", nil, "/say other")
-	ns.EditNew("ext")
+	check(ns.CreateGame("account", "Other", nil, "/say other"), "made")
+	ns.EditNew()
 	check(not (ns.unsavedDialog and ns.unsavedDialog:IsShown()), "asked with nothing changed")
 	ns.ed.name, ns.ed.body = "Guarded", "/say guarded"
-	-- Cancel keeps everything as it was, whichever way the player tried to leave
 	local w = ns.app.window
 	for _, leave in ipairs({
-		function() ns.Edit(ns.ExtRef(other)) end,
-		function() ns.EditNew("char") end,
-		function() ns.app:ShowSection("mine") end,
+		function() ns.Edit(named("Other")) end,
+		function() ns.EditNew("account") end,
+		function() ns.app:ShowSection("builder") end,
 		function() ns.app:Close() end,
 		function() w.close:GetScript("OnClick")(w.close) end,
 		function() w:GetScript("OnKeyDown")(w, "ESCAPE") end,
@@ -835,74 +966,74 @@ step("unsaved changes: another macro, New, another page, x, Escape and /mom ask 
 	}) do
 		leave()
 		answer("cancel")
-		check(ns.app:IsShown() and ns.app.current == "edit" and ns.ed.name == "Guarded" and ns.ed.ref == nil, "cancel lost the editor")
+		check(ns.app:IsShown() and ns.app.current == "macros" and ns.ed.name == "Guarded" and ns.ed.ref == nil, "cancel lost the editor")
 	end
-	check(#extNamed("Guarded") == 0, "saved without being asked")
-	-- Save: saves, then goes on
-	ns.EditNew("char")
+	check(not named("Guarded"), "saved without being asked")
+	ns.EditNew("account")
 	answer("save")
-	check(#extNamed("Guarded") == 1 and ns.ed.ref == nil and ns.ed.as == "char", "save then new")
-	-- Discard: back to what was saved, then goes on
-	ns.Edit(extNamed("Guarded")[1])
+	check(named("Guarded") and ns.ed.ref == nil and ns.ed.as == "account", "save then new")
+	ns.Edit(named("Guarded"))
 	ns.ed.body = "/say changed"
-	ns.app:ShowSection("mine")
+	ns.app:ShowSection("builder")
 	answer("discard")
-	check(ns.app.current == "mine" and extNamed("Guarded")[1].body == "/say guarded" and ns.ed.body == "/say guarded", "discard")
+	check(ns.app.current == "builder" and named("Guarded").body == "/say guarded" and ns.ed.body == "/say guarded", "discard")
 	-- a save that fails stays in the editor
-	ns.EditNew("ext")
+	ns.EditNew()
 	ns.ed.body = "/say no name"
 	ns.app:Close()
 	answer("save")
 	check(ns.app:IsShown() and ns.ed.body == "/say no name" and not ns.unsavedDialog:IsShown(), "failed save left the editor")
 	-- the same macro, changed: just shows it again
-	ns.Edit(extNamed("Guarded")[1])
+	ns.Edit(named("Guarded"))
 	answer("discard")
 	ns.ed.body = "/say again"
-	ns.app:ShowSection("ext")
+	ns.app:ShowSection("backups")
 	answer("cancel")
-	ns.Edit(extNamed("Guarded")[1])
+	ns.Edit(named("Guarded"))
 	check(not ns.unsavedDialog:IsShown() and ns.ed.body == "/say again", "same macro asked or reloaded")
+	-- Escape in combat with unsaved changes: left to the game (no question on top of the Game Menu)
+	MOCK.combat = true
+	MOCK.Fire("PLAYER_REGEN_DISABLED")
+	w:GetScript("OnKeyDown")(w, "ESCAPE")
+	check(not LibStub("EverlookUI-1").IsPopupShown() and not ns.unsavedDialog:IsShown(), "asked about unsaved changes in combat")
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	ns.EditorRevert()
 	ns.app:Close()
-	answer("discard")
 	check(not ns.app:IsShown(), "not closed")
-	ns.DeleteExt(extNamed("Guarded")[1])
-	ns.DeleteExt(ns.ExtRef(other))
+	ns.DeleteGame(named("Guarded"))
+	ns.DeleteGame(named("Other"))
 	check(next(StaticPopupDialogs) == nil, "a StaticPopup was used")
 end)
 
 step("save in combat: waits once, saves the latest text after combat, never a duplicate", function()
-	ns.EditNew("ext")
+	ns.EditNew("account")
 	ns.ed.name, ns.ed.body = "CombatSave", "/say one"
 	MOCK.combat = true
 	local jobs = #ns.queue.jobs
 	local ok, msg = ns.EditorSave()
 	check(ok and msg == "queued" and ns.ed.pending and #ns.queue.jobs == jobs + 1, "not queued")
-	check(last():find("in combat", 1, true), "combat reply: " .. last())
-	local save, copy = ns.saveRow.buttons[1], ns.saveRow.buttons[2]
+	check(last():find("in combat", 1, true) and last():find("when combat ends", 1, true), "combat reply: " .. last())
+	local save, copy = ns.saveRow.buttons[1], ns.saveRow.buttons[3]
 	check(save:GetAlpha() < 1 and copy:GetAlpha() < 1, "Save not greyed out")
-	save:GetScript("OnClick")(save)
+	click(save)
 	ns.EditorSave()
 	check(#ns.queue.jobs == jobs + 1, "a second save was queued")
-	local status
-	for _, wd in ipairs(ns.app.sections.edit.stack.widgets) do
-		if wd.text and wd.text:GetText() and wd.text:GetText():find("Will save when combat ends", 1, true) then status = wd end
-	end
-	check(status, "no 'Will save when combat ends' line")
-	-- still editable; a queued save is not "unsaved": leaving doesn't ask
+	check(editorSays("it will be saved when combat ends"), "no 'saved when combat ends' line")
 	ns.ed.body = "/say two"
 	check(not ns.EditorDirty(), "a queued save counts as unsaved")
 	MOCK.combat = false
 	MOCK.Fire("PLAYER_REGEN_ENABLED")
-	local made = extNamed("CombatSave")
-	check(#made == 1 and made[1].body == "/say two", "after combat: " .. #made .. " macros")
-	check(ns.ed.ref and ns.ed.ref.kind == "ext" and ns.ed.ref.name == "CombatSave" and not ns.ed.pending, "editor still on a new macro")
+	local made = named("CombatSave")
+	check(made and made.body == "/say two" and not named("CombatSave 2"), "after combat")
+	check(ns.ed.ref and ns.ed.ref.name == "CombatSave" and not ns.ed.pending, "editor still on a new macro")
 	check(ns.ed.status and ns.ed.status.ok and ns.ed.status.text == "Saved after combat.", "status")
-	check(logHas("after combat: created extended macro CombatSave") and save:GetAlpha() == 1, "chat line / Save still grey")
+	check(logHas("after combat: created CombatSave as an account macro") and save:GetAlpha() == 1, "chat line / Save still grey")
 	check(not ns.EditorDirty(), "saved text counts as unsaved")
-	ns.DeleteExt(made[1])
+	ns.DeleteGame(made)
 
 	-- it fails after combat: says so in red, the text stays
-	ns.EditNew("char")
+	ns.EditNew("account")
 	ns.ed.name, ns.ed.body = "NoRoom", "/say three"
 	MOCK.combat = true
 	ns.EditorSave()
@@ -917,74 +1048,48 @@ step("save in combat: waits once, saves the latest text after combat, never a du
 	answer("discard")
 
 	-- left for another macro while it waits: it still saves the text as it was left
-	ns.EditNew("ext")
+	ns.EditNew("account")
 	ns.ed.name, ns.ed.body = "LeftBehind", "/say four"
 	MOCK.combat = true
 	ns.EditorSave()
 	ns.ed.body = "/say five"
-	ns.EditNew("ext")
+	ns.EditNew("account")
 	check(not ns.unsavedDialog:IsShown() and ns.ed.ref == nil and ns.ed.name == "", "leaving a queued save asked")
 	MOCK.combat = false
 	MOCK.Fire("PLAYER_REGEN_ENABLED")
-	made = extNamed("LeftBehind")
-	check(#made == 1 and made[1].body == "/say five", "left-behind save")
+	made = named("LeftBehind")
+	check(made and made.body == "/say five", "left-behind save")
 	check(ns.ed.ref == nil and ns.ed.name == "", "the editor jumped to the saved macro")
-	ns.DeleteExt(made[1])
+	ns.DeleteGame(made)
 	ns.app:Close()
 end)
 
-step("bar macros from an older version get the press line at login (out of combat only)", function()
-	local _, _, id = ns.CreateExt("OldBar", nil, "#showtooltip Heal\n/cast Heal")
-	local _, _, index = ns.ExtToBar(ns.ExtRef(id))
-	local old = "#showtooltip Heal\n/click MoMX_" .. id .. "\n#mom x" .. id
-	EditMacro(index, nil, nil, old)
-	MOCK.combat = true
-	MOCK.Fire("PLAYER_ENTERING_WORLD")
-	check(ns.Fresh(ns.GameRef(index)).body == old, "changed in combat")
-	MOCK.combat = false
-	MOCK.Fire("PLAYER_REGEN_ENABLED")
-	local bar = ns.ExtBarMacro(id)
-	check(GetMacroInfo(bar.index) == bar.name and select(3, GetMacroInfo(bar.index)) == "#showtooltip Heal\n/click MoMX_" .. id .. " LeftButton 1\n#mom x" .. id,
-		"not updated: " .. select(3, GetMacroInfo(bar.index)))
-	-- up to date: not edited again
-	local before = edits
-	MOCK.Fire("PLAYER_ENTERING_WORLD")
-	check(edits == before, "an up-to-date bar macro was edited again")
-	ns.DeleteExt(ns.ExtRef(id))
-end)
-
-step("/macro and the game menu open /mom (on the game macros); Blizzard's window one click away", function()
+step("/macro and the game menu open /mom (on the Macros page); Blizzard's window one click away", function()
 	check(MouseoverMacrosDB.takeover == true, "takeover is not on by default")
 	if ns.app:IsShown() then ns.app:Close() end
 	SlashCmdList.MACRO("")
-	check(ns.app:IsShown() and ns.app.current == "account" and MOCK.blizzSlash == 0 and not MacroFrame, "/macro: " .. tostring(ns.app.current))
+	check(ns.app:IsShown() and ns.app.current == "macros" and MOCK.blizzSlash == 0 and not MacroFrame, "/macro: " .. tostring(ns.app.current))
 	ns.app:Close()
-	-- the game menu's / chat menu's Macros: ours opens next to Blizzard's, which stays open (never closed by /mom)
 	ShowMacroFrame()
-	check(MacroFrame and MacroFrame:IsShown() and ns.app:IsShown() and ns.app.current == "account", "game menu")
+	check(MacroFrame and MacroFrame:IsShown() and ns.app:IsShown() and ns.app.current == "macros", "game menu")
 	MacroFrame:Hide()
 	check(ns.macroButton and ns.macroButton:GetParent() == MacroFrame, "no button in Blizzard's window")
-	-- /mom blizzard: Blizzard's window, ours closed; the game menu doesn't take it away while it's open
 	SlashCmdList.MOUSEOVERMACROS("blizzard")
 	check(MacroFrame:IsShown() and not ns.app:IsShown(), "/mom blizzard")
 	ShowMacroFrame()
 	check(MacroFrame:IsShown() and not ns.app:IsShown(), "Blizzard's window taken away while open on purpose")
-	-- its "Open /mom" button: ours opens, Blizzard's stays
 	ns.macroButton:GetScript("OnClick")(ns.macroButton)
 	check(MacroFrame:IsShown() and ns.app:IsShown(), "Open /mom button")
 	MacroFrame:Hide()
 	ns.app:Close()
-	-- once closed, the takeover is back
 	ShowMacroFrame()
 	check(MacroFrame:IsShown() and ns.app:IsShown(), "takeover not back")
 	MacroFrame:Hide()
-	-- the sidebar button
 	local footer = ns.app.window.footer[1]
 	check(footer and footer:GetText() == "Blizzard's macro window", "sidebar button")
 	footer:GetScript("OnClick")(footer)
 	check(MacroFrame:IsShown() and not ns.app:IsShown(), "sidebar button did not open Blizzard's window")
 	MacroFrame:Hide()
-	-- in combat too, Blizzard's window is left alone
 	MOCK.combat = true
 	ShowMacroFrame()
 	check(MacroFrame:IsShown(), "closed Blizzard's window in combat")
@@ -994,15 +1099,14 @@ step("/macro and the game menu open /mom (on the game macros); Blizzard's window
 	check(ns.app:IsShown() and not MacroFrame:IsShown(), "/macro in combat")
 	ns.app:Close()
 	MOCK.combat = false
-	-- unsaved changes: /macro opens the editor, not a list
-	ns.EditNew("ext")
+	-- unsaved changes: /macro opens the editor as it was
+	ns.EditNew()
 	ns.ed.body = "/say unsaved"
-	ns.app.window:Hide() -- hidden by something else (no question)
+	ns.app.window:Hide()
 	SlashCmdList.MACRO("")
-	check(ns.app.current == "edit" and ns.ed.body == "/say unsaved", "/macro left unsaved changes")
+	check(ns.app.current == "macros" and ns.ed.body == "/say unsaved", "/macro left unsaved changes")
 	ns.app:Close()
 	answer("discard")
-	-- switched off: /macro and the game menu are Blizzard's again
 	SlashCmdList.MOUSEOVERMACROS("takeover off")
 	check(MouseoverMacrosDB.takeover == false, "setting")
 	SlashCmdList.MACRO("")
@@ -1012,10 +1116,6 @@ step("/macro and the game menu open /mom (on the game macros); Blizzard's window
 	check(MacroFrame:IsShown() and not ns.app:IsShown(), "game menu with the takeover off")
 	MacroFrame:Hide()
 	SlashCmdList.MOUSEOVERMACROS("takeover on")
-	-- an empty Mine says where the player's own macros are
-	ns.app:Open("mine")
-	check(ns.EMPTY_MINE and ns.EMPTY_MINE:find("under Account and Character", 1, true), "Mine's empty text")
-	ns.app:Close()
 end)
 
 ------------------------------------------------------------------------
@@ -1275,18 +1375,14 @@ end)
 
 step("ring: the key goes through /mom's bindings; off gives the button back; left/right click refused", function()
 	check(MOCK.bindings.BUTTON3 == "MoMRingTrigger", "middle mouse opens the ring")
-	local _, _, id = ns.CreateExt("RingKeyTest", nil, "/say hi")
-	ns.BindExt(ns.ExtRef(id), "F7")
-	check(MOCK.bindings.F7 == "MoMX_" .. id and MOCK.bindings.BUTTON3 == "MoMRingTrigger", "both bound")
 	SlashCmdList.MOUSEOVERMACROS("ring off")
-	check(MOCK.bindings.BUTTON3 == nil and MOCK.bindings.F7 == "MoMX_" .. id, "off: middle mouse is the game's again")
+	check(MOCK.bindings.BUTTON3 == nil, "off: middle mouse is the game's again")
 	SlashCmdList.MOUSEOVERMACROS("ring on")
 	check(MOCK.bindings.BUTTON3 == "MoMRingTrigger", "on again")
 	local ok = Ring.SetKey("BUTTON1")
 	check(not ok and ns.db.ring.key == "BUTTON3", "left click alone refused")
 	check(Ring.SetKey("SHIFT-BUTTON2") and MOCK.bindings["SHIFT-BUTTON2"] == "MoMRingTrigger", "shift + right click is fine")
 	Ring.SetKey("BUTTON3")
-	ns.DeleteExt(ns.ExtRef(id))
 end)
 
 step("ring: the Ring page and /mom ring edit it (drop, sub-ring, reorder, reset)", function()
@@ -1390,6 +1486,145 @@ step("the Mine list names what each _mom macro casts", function()
 	check(W("/say hi") == "", "nothing cast")
 end)
 
+-- the ring tests gave every spell ID a made-up name: back to the client's names (the English ones)
+C_Spell.GetSpellName = function(id) return MOCK.spellNames[id] end
+
+step("Macros page: every macro in one list; the search finds devouring / plague; the quick picks find the templates", function()
+	check(ns.CreateGame("account", "MyDP", nil, "#showtooltip\n/cast [@mouseover,harm][] Devouring Plague"), "made")
+	ns.app:Open("macros")
+	searchFor("")
+	local a, _, c = ns.Counts()
+	check(#shownRows() == a + c, "all macros, account and character together: " .. #shownRows() .. " of " .. (a + c))
+	for _, q in ipairs({ "devouring", "plague", "DEVOURING Plague" }) do
+		searchFor(q)
+		check(rowFor(function(it) return it.name == "MyDP" end), q .. ": your own macro casting it")
+		check(rowFor(function(it) return it.index == entry("dplague").index end), q .. ": the set macro")
+	end
+	local row = rowFor(function(it) return it.index == entry("dplague").index end)
+	check(row.title:GetText() == entry("dplague").spell and row.detail:GetText():find(entry("dplague").macro, 1, true), "the set macro's spell first: " .. row.title:GetText())
+	searchFor("")
+	ns.app:Open("builder")
+	for _, q in ipairs({ "devouring", "plague", "power infusion", "DEVOURING Plague" }) do
+		quickFor(q)
+		local tmpl = rowFor(function(it) return it.t and it.t.id == "dppi" end, ns.quickList)
+		check(tmpl and tmpl.title:GetText():find("Devouring Plague / Power Infusion", 1, true), q .. ": no Devouring Plague / Power Infusion row")
+		if q ~= "power infusion" then
+			check(rowFor(function(it) return it.e and it.e.key == "dplague" end, ns.quickList), q .. ": no Devouring Plague set macro")
+			check(rowFor(function(it) return it.t and it.t.id == "dpfheal" end, ns.quickList), q .. ": no Devouring Plague / Flash Heal row")
+		end
+	end
+	quickFor("devouring")
+	local tmpl = rowFor(function(it) return it.t and it.t.id == "dppi" end, ns.quickList)
+	check(tmpl.buttons[1]:GetText() == "Create" and not tmpl.buttons[2]:IsShown(), "not made: Create, nothing to put on a bar")
+	click(tmpl.buttons[1])
+	check(ns.Resolve("t:dppi") and tmpl.buttons[1]:GetText() == "Update" and tmpl.buttons[2]:IsShown(), "made")
+	MOCK.picked = nil
+	click(tmpl.buttons[2])
+	check(MOCK.picked == ns.Resolve("t:dppi"), "Put on bar")
+	quickFor("")
+	-- in the Macros list it shows as the template's title, its macro name after
+	ns.app:Open("macros")
+	searchFor("power infusion")
+	local r = rowFor(function(it) return it.index == ns.Resolve("t:dppi") end)
+	check(r and r.title:GetText() == "Devouring Plague / Power Infusion", "the template's title")
+	searchFor("")
+	ns.DeleteGame(named("MyDP"))
+	ns.app:Close()
+end)
+
+step("bulk delete: tick boxes, Delete selected (N), one line; Undo puts them all back", function()
+	for i = 1, 3 do check(ns.CreateGame("account", "Bulk" .. i, nil, "/say bulk " .. i), "made") end
+	ns.app:Open("macros")
+	searchFor("bulk")
+	local rows = shownRows()
+	check(#rows == 3, "three rows: " .. #rows)
+	local del = ns.deleteSelected
+	check(not del:GetParent():IsShown(), "nothing ticked: Delete selected shown")
+	for _, r in ipairs(rows) do click(r.tick) end
+	check(rows[1].tick.on and del:GetParent():IsShown() and del:GetText() == "Delete selected (3)", "ticked: " .. del:GetText())
+	click(rows[2].tick)
+	check(del:GetText() == "Delete selected (2)", "untick")
+	click(rows[2].tick)
+	local n = #MOCK.log
+	click(del)
+	check(not named("Bulk1") and not named("Bulk2") and not named("Bulk3"), "not all deleted")
+	check(#MOCK.log == n + 1 and last():find("deleted 3 macros", 1, true) and last():find("/mom undo", 1, true), "one summary line: " .. last())
+	check(ns.statusNote.text:GetText():find("Deleted 3 macros", 1, true) and next(ns.selected) == nil, "status / selection")
+	SlashCmdList.MOUSEOVERMACROS("undo")
+	check(named("Bulk1") and named("Bulk2") and named("Bulk3"), "undo did not put them all back")
+	check(last():find("put back", 1, true), "undo line: " .. last())
+	for i = 1, 3 do ns.DeleteGame(named("Bulk" .. i)) end
+	searchFor("")
+	ns.app:Close()
+end)
+
+step("in combat: delete, move and restore say so at once, show as waiting, never queue twice, and can be cancelled", function()
+	check(ns.CreateGame("account", "CombatDel", nil, "/say x"), "made")
+	ns.Edit(named("CombatDel"))
+	local del = ns.saveRow.buttons[4]
+	MOCK.combat = true
+	local jobs = #ns.queue.jobs
+	click(del)
+	check(last():find("CombatDel will be deleted when combat ends", 1, true), "said at once: " .. last())
+	check(#ns.queue.jobs == jobs + 1 and named("CombatDel"), "queued once, not deleted yet")
+	check(del:GetText() == "Cancel", "editor's Delete: " .. del:GetText())
+	check(editorSays("CombatDel will be deleted when combat ends"), "the editor doesn't say it waits")
+	ns.DeleteMacros({ named("CombatDel") })
+	check(#ns.queue.jobs == jobs + 1 and last():find("already waiting", 1, true), "queued twice: " .. last())
+	searchFor("CombatDel")
+	local row = rowFor(function(it) return it.name == "CombatDel" end)
+	check(row.detail:GetText():find("Deleting after combat", 1, true), "row: " .. row.detail:GetText())
+	click(del)
+	check(last():find("cancelled", 1, true) and not ns.pending["del:account:CombatDel"] and del:GetText() == "Delete", "cancel")
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	check(named("CombatDel"), "deleted although cancelled")
+	MOCK.combat = true
+	ns.DeleteMacros({ named("CombatDel") })
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	check(not named("CombatDel") and logHas("deleted CombatDel"), "not deleted after combat")
+	-- move ("Stored as"): said at once; choosing again cancels
+	local heal = ns.Fresh({ kind = "game", scope = "char", name = "MyHeal" })
+	ns.Edit(heal)
+	MOCK.combat = true
+	jobs = #ns.queue.jobs
+	ns.EditorMove("account")
+	check(last():find("MyHeal will be moved to account macros when combat ends", 1, true), "move: " .. last())
+	check(editorSays("MyHeal will be moved to account macros when combat ends"), "the editor doesn't say the move waits")
+	ns.EditorMove("account")
+	check(last():find("cancelled", 1, true) and #ns.queue.jobs == jobs + 1, "move cancel")
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	check(ns.Fresh(heal) and ns.Fresh(heal).scope == "char", "moved although cancelled")
+	-- restore from the bin: said at once
+	ns.app:Open("backups")
+	local list
+	for _, w in ipairs(ns.app.sections.backups.stack.widgets) do if w.rows and not list then list = w end end
+	MOCK.combat = true
+	click(list.rows[1].buttons[1])
+	check(last():find("will be restored when combat ends", 1, true) and list.rows[1].buttons[1]:GetText() == "Cancel", "restore: " .. last())
+	click(list.rows[1].buttons[1])
+	MOCK.combat = false
+	MOCK.Fire("PLAYER_REGEN_ENABLED")
+	ns.app:Open("macros")
+	searchFor("")
+	ns.app:Close()
+end)
+
+step("a set macro deleted in /mom: Create / update all leaves it out; Undo or Create brings it back", function()
+	local name = entry("renew").macro
+	ns.DeleteMacros({ ns.GameRef(GetMacroIndexByName(name)) })
+	local e = entry("renew")
+	check(not find(name) and e.deleted and not e.index, "not deleted")
+	SlashCmdList.MOUSEOVERMACROS("install")
+	check(not entry("renew").index and last():find("you deleted left out", 1, true), "install made it again: " .. last())
+	ns.Undo()
+	check(find(name) and entry("renew").index and not entry("renew").deleted, "undo: " .. entry("renew").status)
+	ns.DeleteMacros({ ns.GameRef(GetMacroIndexByName(name)) })
+	SlashCmdList.MOUSEOVERMACROS("create renew")
+	check(entry("renew").status == "ok" and not entry("renew").deleted, "Create did not make it again")
+end)
 step("the player's macros were never changed", function()
 	check(find("fort").body == PLAYER_FORT and find("Mount2").body == "/cast Riding Turtle", "changed") -- Mount2: renamed by the player in the editor
 	check(find("smite").body == "#showtooltip Smite\n/cast Smite", "smite changed")

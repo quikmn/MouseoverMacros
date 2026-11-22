@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+- A new window built around three jobs. **Macros**: all your macros in one list (what each one casts first), the editor right next to it. Drag a row or the editor's icon onto your bars, or click Put on bar.
+- The editor: name, icon (from the spell, or pick one), a live check of every spell name and the 255 count, Insert spell from your spellbook with a rank, tidy condition buttons, Save and Undo. Earlier versions are folded away under the text.
+- **Mouseover builder**: pick a spell for a friend, one for an enemy, or both, with a rank. You see the macro and a short name ("DP / FH r1"); Create saves it and puts it on your cursor. Your class's set and the ready-made macros are its Quick picks, with "Make my whole mouseover set".
+- New macros go to a character slot, else an account slot, and the window says which. When both are full it says so plainly.
+- Delete is one click. Undo (or /mom undo) puts it back, also after deleting several ticked macros at once, and the last 100 are kept under Backups. In combat it says right away what will happen after the fight, and you can cancel it.
+- Priest: a Devouring Plague / Flash Heal rank 1 ready-made macro.
+- Extended macros are gone. At your next login each one becomes a normal macro, and buttons already on your bars keep working. One that's too long, or doesn't fit, waits in Backups, and chat names it.
+
 ## v0.3.9 (2026-11-22)
 - Priest: the Cure Disease macro casts Abolish Disease once you know it. One slot for both, and it's already on your bars.
 - In combat, Pick up and dragging a macro open the game's own macro window to drag it from, with one short line in chat instead of a line per try.

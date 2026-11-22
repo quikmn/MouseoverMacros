@@ -284,7 +284,6 @@ end
 local function AddChoices()
     local out = {}
     for _, k in ipairs(R.DYNAMIC_ORDER) do out[#out + 1] = { value = "dyn:" .. k, text = R.DYNAMIC[k].label } end
-    for _, x in ipairs(ns.List("ext")) do out[#out + 1] = { value = "ext:" .. x.id, text = "Extended: " .. x.name } end
     for _, s in ipairs(R.EquipmentSets()) do out[#out + 1] = { value = "set:" .. s.name, text = "Equipment set: " .. s.name } end
     return out
 end
@@ -292,7 +291,6 @@ end
 local function SliceFromChoice(v)
     local kind, rest = tostring(v):match("^(%a+):(.*)$")
     if kind == "dyn" then return { kind = rest } end
-    if kind == "ext" then return { kind = "ext", id = tonumber(rest) } end
     if kind == "set" then return { kind = "equipset", name = rest } end
 end
 

@@ -73,6 +73,7 @@ ns.DEFAULTS = {
 ns.CHAR_DEFAULTS = {
     owned = {},             -- [macro key] = { name, scope = "char", created, body }: this character's macros of ours
     made = {},              -- [macro key] = true: /mom made this macro on this character once (never made again on its own)
+    deleted = {},           -- [macro key] = true: the player deleted ours in /mom (Create / update all leaves it out)
     -- auto: nil = first login not handled yet; true = set up by /mom automatically (new spells get macros);
     -- false = the player had set /mom up here already (left alone)
 }
@@ -313,6 +314,7 @@ function ns.Entries()
     for _, m in ipairs(ns.MACROS[Class()] or {}) do
         local e = { key = m[1], spell = ns.SpellName(m), kind = m[3], body = ns.Body(m), desc = ns.KINDS[m[3]].desc,
             on = not Off(m[1]), known = ns.Known(m), why = m.why, default = m.on ~= false, pet = m.pet }
+        e.deleted = cdb and cdb.deleted and cdb.deleted[e.key] or nil
         local index, name, body, rec = ns.Resolve(e.key)
         if index then
             e.index, e.macro, e.account = index, name, rec.scope == "account"
@@ -378,6 +380,7 @@ function ns.Install(e)
         if not CreateMacro(new, QUESTION_MARK, e.body, perChar) then return false end
         Record(e.key, new, perChar and "char" or "account").body = e.body
         cdb.made[e.key] = true
+        cdb.deleted[e.key] = nil
         return true
     end
     if db.where ~= "account" and charRoom and make(true) then return "created", new end
@@ -415,9 +418,9 @@ local app = UI:NewApp({
     addon = ADDON,
     slash = "/mom",
     aliases = { "/emacros" }, -- the EverlookDB family's /e<name> (like /ebar, /epets)
-    tagline = "Your macros: mouseover sets, extended macros past the slot limits, backups.",
+    tagline = "Your macros: a macro editor, mouseover macros for your spells in a few clicks, backups and a ring menu.",
     accent = { 0.25, 0.75, 1.0 },
-    width = 860, height = 640,
+    width = 980, height = 640,
     position = function() return db end,
     buttons = {
         { label = "Blizzard's macro window", onClick = function() ns.OpenBlizzard() end,
@@ -430,11 +433,12 @@ local function Queued(what)
     app:Print("|cffffb347in combat:|r macros can't be changed now. " .. what .. " will happen when combat ends.")
 end
 
--- Run fn now, or (in combat) after combat. Returns true when it had to wait.
-function ns.Defer(what, fn)
+-- Run fn now, or (in combat: InCombatLockdown, nothing else) after combat. Returns true when it had to wait.
+-- line: what chat says at once instead of the general "... will happen when combat ends".
+function ns.Defer(what, fn, line)
     if InCombatLockdown() then
         queue.jobs[#queue.jobs + 1] = fn
-        Queued(what)
+        if line then app:Print(line) elseif line == nil then Queued(what) end -- false: nothing to say
         return true
     end
     fn()
@@ -463,7 +467,7 @@ end
 function ns.InstallAll()
     if InCombatLockdown() then
         queue.all = true
-        Queued("Create / update all")
+        Queued("Making your mouseover set")
         return
     end
     local class = Class()
@@ -471,10 +475,12 @@ function ns.InstallAll()
         app:Print("no macros defined for " .. tostring(class) .. " yet.")
         return
     end
-    local created, updated, failed, kept, skipped, later = {}, {}, {}, {}, 0, 0
+    local created, updated, failed, kept, skipped, later, gone = {}, {}, {}, {}, 0, 0, 0
     for _, e in ipairs(ns.Entries()) do
         if not e.on then
             skipped = skipped + 1
+        elseif e.deleted and not e.index then
+            gone = gone + 1 -- deleted in /mom on purpose: "all" doesn't make it again
         elseif e.status == "differs" then
             kept[#kept + 1] = e.key
         elseif not e.known and not e.index then
@@ -486,9 +492,10 @@ function ns.InstallAll()
             else failed[#failed + 1] = e.key end
         end
     end
-    app:Print(("created %d, updated %d%s%s%s%s. Drag them from /macro or this window to your bars."):format(
+    app:Print(("created %d, updated %d%s%s%s%s%s. Drag them from /macro or this window to your bars."):format(
         #created, #updated,
         skipped > 0 and (", " .. skipped .. " switched off") or "",
+        gone > 0 and (", " .. gone .. " you deleted left out (Create on its row makes one again)") or "",
         later > 0 and (", " .. later .. " for spells you haven't learned yet (made when you learn them)") or "",
         #kept > 0 and (", kept " .. #kept .. " you changed by hand (" .. table.concat(kept, ", ") .. "; Update on its row puts ours back)") or "",
         #failed > 0 and (", |cffff4040no room (character and account macros full) for: " .. table.concat(failed, ", ") .. "|r") or ""))

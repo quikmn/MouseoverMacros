@@ -4,21 +4,18 @@
 -- each; the client enforces those, /mom can't raise them). Any of them can be edited here, because
 -- that is what a macro window is for: the ownership record only limits what /mom changes on its own.
 --
--- Extended macros: stored in our saved variables, as many as you like, up to 1023 characters each.
--- Each one is a hidden secure button (MoMX_<id>) that runs the text as a macro. They cost no slot;
--- you run one with a key binding (per character), or put it on an action bar through a one-line
--- "/click MoMX_<id>" macro, which takes one game slot.
+-- Extended macros (up to 0.3.9: macros in our saved variables, run by a hidden button) are gone: at login each one
+-- becomes a normal macro (ns.MigrateExt), its bar macro is turned into it in place, and what can't be one goes to the bin.
 --
 -- Backups: every save keeps the text it replaced (the last 10 per macro); deleted macros go to a
--- bin (the last 20). Export / import moves a set of macros as one line of text.
+-- bin (the last 100). Export / import moves a set of macros as one line of text.
 local _, ns = ...
 
 local MAX_BODY = 255
-local MAX_EXT = 1023     -- macrotext on a secure button
 local MAX_NAME = 16      -- the client's limit for a macro name
 local HISTORY = 10
-local BIN = 20
-ns.MAX_EXT, ns.MAX_NAME = MAX_EXT, MAX_NAME
+local BIN = 100   -- deleting goes on one click (Undo, Backups): room for a whole clean-up
+ns.MAX_NAME = MAX_NAME
 
 local function DB() return ns.db end
 local function CDB() return ns.cdb end
@@ -26,18 +23,17 @@ local function Now() return time and time() or 0 end
 local Trim = function(s) return ns.Trim(s) end
 
 ns.MANAGER_DEFAULTS = {
-    ext = {},          -- [id] = { name, icon, body, created }: extended macros (every character)
-    extNext = 1,
-    history = {},      -- ["a:" .. name] (account macros), ["x" .. id] (extended) = { { t, body, icon }, ... } newest first
+    -- ext = { [id] = { name, icon, body } }: extended macros of 0.3.9 and earlier, until ns.MigrateExt turns them into macros
+    extMoved = {},     -- [old extended id] = the macro it became: other characters' bar macros for it are turned into it too
+    history = {},      -- ["a:" .. name] (account macros) = { { t, body, icon }, ... } newest first
     bin = {},          -- deleted macros: { { t, kind, scope, name, icon, body }, ... } newest first
 }
 ns.MANAGER_CHAR_DEFAULTS = {
-    binds = {},        -- [extended id] = key: this character's key bindings for extended macros
     history = {},      -- [name] = { ... }: this character's character macros
 }
 
 ------------------------------------------------------------------------
--- References: { kind = "game", scope, name, index, icon, body, ours, key } or { kind = "ext", id, name, icon, body }
+-- References: { kind = "game", scope, name, index, icon, body, ours, key }
 ------------------------------------------------------------------------
 local function OwnerKey(name, scope)
     for _, r in ipairs(ns.Records()) do
@@ -53,44 +49,29 @@ function ns.GameRef(index)
     return { kind = "game", scope = scope, name = name, index = index, icon = icon, body = body or "", ours = key ~= nil, key = key }
 end
 
-function ns.ExtRef(id)
-    local x = DB().ext[id]
-    if not x then return nil end
-    return { kind = "ext", id = id, name = x.name, icon = x.icon, body = x.body or "" }
-end
-
 -- The same macro looked up again (indexes move when macros are added, removed or renamed).
 function ns.Fresh(ref)
     if not ref then return nil end
-    if ref.kind == "ext" then return ns.ExtRef(ref.id) end
     if ref.index and GetMacroInfo(ref.index) == ref.name and ns.ScopeOf(ref.index) == ref.scope then return ns.GameRef(ref.index) end
     local i = ns.EachMacro(ref.scope, function(_, n) return n == ref.name end)
     return i and ns.GameRef(i) or nil
 end
 
--- Game macros of a scope ("account", "char", nil = both), extended ones, or "mine" (what /mom made).
+-- Game macros of a scope ("account", "char", nil = both), or "mine" (what /mom made).
 function ns.List(which)
     local out = {}
-    if which == "ext" then
-        local ids = {}
-        for id in pairs(DB().ext) do ids[#ids + 1] = id end
-        table.sort(ids)
-        for _, id in ipairs(ids) do out[#out + 1] = ns.ExtRef(id) end
-        return out
-    end
     local scope = (which == "account" or which == "char") and which or nil
     ns.EachMacro(scope, function(i) out[#out + 1] = ns.GameRef(i) end)
     if which == "mine" then
         local mine = {}
         for _, r in ipairs(out) do if r.ours then mine[#mine + 1] = r end end
-        for _, r in ipairs(ns.List("ext")) do mine[#mine + 1] = r end
         return mine
     end
     return out
 end
 
--- What a macro casts, in words: the spell names of its /cast and /use lines ("Abolish Disease"), or the
--- extended macro a "/click MoMX_<id>" runs. Shown next to the _mom names, which say nothing by themselves.
+-- What a macro casts, in words: the spell names of its /cast and /use lines ("Abolish Disease"). Shown next to the
+-- _mom names, which say nothing by themselves.
 function ns.WhatItDoes(body)
     local names, seen = {}, {}
     local function add(n)
@@ -105,10 +86,6 @@ function ns.WhatItDoes(body)
                 part = part:gsub("%b[]", ""):gsub("reset=%S+", "")
                 for n in (part .. ","):gmatch("([^,]*),") do add(n) end
             end
-        elseif cmd == "click" then
-            local id = rest:match("^MoMX_(%d+)")
-            local x = id and ns.ExtRef(tonumber(id))
-            if x then add(x.name) end
         end
     end
     return table.concat(names, ", ")
@@ -116,19 +93,13 @@ end
 
 function ns.Counts()
     local a, c = GetNumMacros()
-    local n = 0
-    for _ in pairs(DB().ext) do n = n + 1 end
-    return a or 0, ns.MaxAccount(), c or 0, ns.MaxChar(), n
+    return a or 0, ns.MaxAccount(), c or 0, ns.MaxChar()
 end
 
-function ns.Limit(ref) return ref and ref.kind == "ext" and MAX_EXT or MAX_BODY end
+function ns.Limit() return MAX_BODY end
 
 -- What a macro costs, in words.
 function ns.Cost(ref)
-    if ref.kind == "ext" then
-        local bar = ns.ExtBarMacro(ref.id)
-        return "extended - no slot" .. (bar and ("; on bars via " .. bar.name .. " (1 " .. (bar.scope == "account" and "account" or "character") .. " slot)") or "")
-    end
     return ref.scope == "account" and "account macro - 1 of " .. ns.MaxAccount() .. " account slots" or "character macro - 1 of " .. ns.MaxChar() .. " character slots"
 end
 
@@ -136,7 +107,6 @@ end
 -- Backups
 ------------------------------------------------------------------------
 local function HistStore(ref)
-    if ref.kind == "ext" then return DB().history, "x" .. ref.id end
     if ref.scope == "account" then return DB().history, "a:" .. ref.name end
     return CDB().history, ref.name
 end
@@ -168,7 +138,7 @@ end
 -- A deleted macro goes to the bin; its earlier versions go with it (the bin keeps the last text), so
 -- the history of deleted macros doesn't pile up in the saved variables.
 local function ToBin(ref)
-    table.insert(DB().bin, 1, { t = Now(), kind = ref.kind, scope = ref.scope, name = ref.name, icon = ref.icon, body = ref.body })
+    table.insert(DB().bin, 1, { t = Now(), kind = ref.kind, scope = ref.scope, name = ref.name, icon = ref.icon, body = ref.body, key = ref.key })
     while #DB().bin > BIN do table.remove(DB().bin) end
     local store, key = HistStore(ref)
     store[key] = nil
@@ -188,7 +158,7 @@ local function CheckText(name, body, limit)
     if Trim(name) == "" then return "a macro needs a name" end
     if limit == MAX_BODY and #name > MAX_NAME then return "names are at most " .. MAX_NAME .. " characters" end
     if #body > limit then
-        return ("too long: %d of %d characters%s"):format(#body, limit, limit == MAX_BODY and " (an extended macro takes up to " .. MAX_EXT .. ")" or "")
+        return ("too long: %d of %d characters"):format(#body, limit)
     end
 end
 
@@ -238,7 +208,7 @@ function ns.CreateGame(scope, name, icon, body)
     return ExactlyNow("creating " .. name, function()
         if not Room(scope) then
             return false, scope == "account" and ("account macros are full (" .. ns.MaxAccount() .. ")")
-                or ("character macros are full (" .. ns.MaxChar() .. "); account macros or an extended macro need no character slot")
+                or ("character macros are full (" .. ns.MaxChar() .. "); account macros need no character slot")
         end
         if not CreateMacro(name, icon or ns.QUESTION_MARK, body, scope == "char") then return false, "the game refused to create " .. name end
         return true, "created " .. name
@@ -254,6 +224,8 @@ function ns.DeleteGame(ref)
         if cur.key then
             local store = cur.scope == "char" and CDB().owned or DB().owned
             store[cur.key] = nil
+            -- deleted on purpose: Create / update all leaves it out from now on (Create on its row makes it again)
+            if CDB().deleted then CDB().deleted[cur.key] = true end
         end
         DeleteMacro(cur.index)
         return true, "deleted " .. cur.name .. " (in the bin under Backups)"
@@ -283,26 +255,9 @@ function ns.MoveGame(ref, toScope)
 end
 
 ------------------------------------------------------------------------
--- Extended macros
+-- Key bindings: only the ring's key now (extended macros had keys of their own up to 0.3.9)
 ------------------------------------------------------------------------
 local bindOwner
-local function Button(id)
-    local name = "MoMX_" .. id
-    local b = _G[name]
-    if not b then
-        b = CreateFrame("Button", name, UIParent, "SecureActionButtonTemplate")
-        b:Hide()
-        -- Acts once, on the press: only presses reach the button (a key's release doesn't), and
-        -- useOnKeyDown true makes SecureActionButton_OnClick act on a press whatever the game's
-        -- ActionButtonUseKeyDown setting is. The bar macro clicks it with "LeftButton 1" (a press).
-        b:RegisterForClicks("AnyDown")
-        b:SetAttribute("useOnKeyDown", true)
-        b:SetAttribute("type", "macro")
-    end
-    return b
-end
-ns.ExtButton = Button
-
 -- What a key does without /mom (the game's binding, or another addon's override), as the key binding list
 -- names it ("Move and Steer"), or nil. Read while /mom's own overrides are cleared.
 local function BoundTo(key)
@@ -345,129 +300,152 @@ local function ApplyBindings()
     local ringKey, ringButton
     if ns.RingBinding then ringKey, ringButton = ns.RingBinding() end
     TellRingClash(ringKey)
-    for id, key in pairs(CDB().binds) do
-        if DB().ext[id] then SetOverrideBindingClick(bindOwner, false, key, "MoMX_" .. id, "LeftButton")
-        else CDB().binds[id] = nil end
-    end
-    -- the ring's key (Ring.lua), set after the macros' so it wins a clash
+    -- the ring's key (Ring.lua)
     if ringKey then SetOverrideBindingClick(bindOwner, false, ringKey, ringButton, "LeftButton") end
 end
 ns.ApplyBindings = ApplyBindings
 
--- Every extended macro's button and this character's key bindings (out of combat).
-function ns.SyncExt()
+------------------------------------------------------------------------
+-- Extended macros of 0.3.9 and earlier become normal macros (at login, out of combat)
+------------------------------------------------------------------------
+-- A name for a macro in a scope: at most 16 characters, not taken there (a number added when it is).
+local function FreeName(name, scope)
+    name = Trim(tostring(name or "")):sub(1, MAX_NAME)
+    if name == "" then name = "Macro" end
+    local try, n = name, 1
+    while ns.EachMacro(scope, function(_, x) return x == try end) do
+        n = n + 1
+        local suffix = " " .. n
+        try = name:sub(1, MAX_NAME - #suffix) .. suffix
+    end
+    return try
+end
+ns.FreeName = FreeName
+
+-- The ring's slices that held an extended macro hold the macro it became (or nothing, when it went to the bin).
+local function RingSlices(moved)
+    local ring = DB().ring
+    if type(ring) ~= "table" or type(ring.top) ~= "table" then return end
+    local function fix(slot)
+        if type(slot) ~= "table" or slot.kind ~= "ext" then return slot end
+        local m = moved[slot.id]
+        return m and { kind = "macro", name = m.name } or false
+    end
+    for i, slot in pairs(ring.top) do
+        ring.top[i] = fix(slot)
+        if type(slot) == "table" and slot.kind == "ring" and type(slot.items) == "table" then
+            local items = {}
+            for _, it in ipairs(slot.items) do
+                local f = fix(it)
+                if f then items[#items + 1] = f end
+            end
+            slot.items = items
+        end
+    end
+end
+
+local function DropRecord(key) DB().owned[key], CDB().owned[key] = nil, nil end
+
+-- Every extended macro becomes a normal macro: its bar macro ("/click MoMX_<id>") turned into it in place (the bar
+-- buttons keep working), else a new one (an account slot first: extended macros were on every character, else a
+-- character slot). Over 255 characters or no slot: it goes to the bin under Backups, named in chat. Their key
+-- bindings go (one line says which); bar macros for them on other characters are turned into the macro at those
+-- characters' logins.
+function ns.MigrateExt()
     if InCombatLockdown() then
-        ns.Defer("setting up extended macros", ns.SyncExt)
+        ns.Defer("turning extended macros into normal macros", ns.MigrateExt)
         return
     end
-    for id, x in pairs(DB().ext) do
-        Button(id):SetAttribute("macrotext", x.body)
-        -- a bar macro of ours from an older version ("/click MoMX_n", on release) gets the press line
-        local bar = ns.ExtBarMacro(id)
-        if bar then
-            local _, _, body = GetMacroInfo(bar.index)
-            local want = ns.BarBody(id, x.body)
-            if body ~= want then EditMacro(bar.index, bar.name, nil, want) end
-        end
+    local db, cdb = DB(), CDB()
+    if type(cdb.binds) == "table" and next(cdb.binds) then
+        local keys = {}
+        for _, k in pairs(cdb.binds) do keys[#keys + 1] = tostring(k) end
+        table.sort(keys)
+        ns.app:Print("extended macros are now normal macros, so their key bindings on this character are gone: "
+            .. table.concat(keys, ", ") .. ". Put the macros on your action bars and bind those.")
     end
-    ApplyBindings()
-end
-
-function ns.ExtBarMacro(id)
-    local i, name = ns.Resolve("x" .. id)
-    if i then return { index = i, name = name, scope = ns.ScopeOf(i) } end
-end
-
--- "LeftButton 1": the click is a press (down), which is when the button acts.
-local function BarBody(id, body)
-    local tip = tostring(body or ""):match("^(#showtooltip[^\n]*)")
-    return (tip and tip .. "\n" or "") .. "/click MoMX_" .. id .. " LeftButton 1\n#mom x" .. id
-end
-ns.BarBody = BarBody
-
-function ns.CreateExt(name, icon, body)
-    local err = CheckText(name, body, MAX_EXT)
-    if err then return false, err end
-    return ExactlyNow("creating " .. name, function()
-        local id = DB().extNext
-        DB().extNext = id + 1
-        DB().ext[id] = { name = name, icon = icon or ns.QUESTION_MARK, body = body, created = Now() }
-        Button(id):SetAttribute("macrotext", body)
-        return true, "created extended macro " .. name, id
+    cdb.binds = nil
+    db.extMoved = type(db.extMoved) == "table" and db.extMoved or {}
+    local moved = db.extMoved
+    -- the bar macros this character can see, by extended id
+    local bars = {}
+    ns.EachMacro(nil, function(i, _, body)
+        local id = tostring(body or ""):match("/click MoMX_(%d+)")
+        if id then bars[tonumber(id)] = bars[tonumber(id)] or {} ; table.insert(bars[tonumber(id)], i) end
     end)
-end
-
-function ns.SaveExt(ref, name, icon, body)
-    local err = CheckText(name, body, MAX_EXT)
-    if err then return false, err end
-    return ExactlyNow("saving " .. name, function()
-        local x = DB().ext[ref.id]
-        if not x then return false, "that extended macro no longer exists" end
-        if x.body ~= body or (icon and x.icon ~= icon) then ns.PushHistory(ns.ExtRef(ref.id), x.body, x.icon) end
-        x.name, x.icon, x.body = name, icon or x.icon, body
-        Button(ref.id):SetAttribute("macrotext", body)
-        local bar = ns.ExtBarMacro(ref.id)
-        if bar then EditMacro(bar.index, bar.name, x.icon, BarBody(ref.id, body)) end
-        return true, "saved " .. name
-    end)
-end
-
-function ns.DeleteExt(ref)
-    return ExactlyNow("deleting " .. ref.name, function()
-        local x = DB().ext[ref.id]
-        if not x then return false, "that extended macro no longer exists" end
-        ToBin(ns.ExtRef(ref.id))
-        local bar = ns.ExtBarMacro(ref.id)
-        if bar then DeleteMacro(bar.index) end
-        DB().owned["x" .. ref.id], CDB().owned["x" .. ref.id] = nil, nil
-        DB().ext[ref.id] = nil
-        CDB().binds[ref.id] = nil
-        Button(ref.id):SetAttribute("macrotext", nil)
-        ApplyBindings()
-        return true, "deleted " .. x.name .. " (in the bin under Backups)"
-    end)
-end
-
--- A key for an extended macro on this character (nil clears it). Overrides the key's normal
--- binding while set; the game's own key binding set is not changed.
-function ns.BindExt(ref, key)
-    return ExactlyNow("binding " .. ref.name, function()
-        if not DB().ext[ref.id] then return false, "that extended macro no longer exists" end
-        if key then
-            for id, k in pairs(CDB().binds) do if k == key then CDB().binds[id] = nil end end
-        end
-        -- what the key does in the game's own bindings, which this overrides while set (W: Move Forward)
-        local was = key and GetBindingAction and GetBindingAction(key)
-        local instead = ""
-        if type(was) == "string" and was ~= "" then
-            instead = " (instead of " .. (_G["BINDING_NAME_" .. was] or was) .. ", until you clear it)"
-        end
-        CDB().binds[ref.id] = key
-        ApplyBindings()
-        return true, key and (ref.name .. " runs on " .. key .. instead) or (ref.name .. ": key cleared")
-    end)
-end
-
--- A one-line game macro that clicks the extended macro's button, to drag to a bar. Uses one slot.
-function ns.ExtToBar(ref)
-    return ExactlyNow("making a bar macro for " .. ref.name, function()
-        local x = DB().ext[ref.id]
-        if not x then return false, "that extended macro no longer exists" end
-        local bar = ns.ExtBarMacro(ref.id)
-        if bar then return true, "already on " .. bar.name, bar.index end
-        local name = ns.NewName("x" .. ref.id)
-        local body = BarBody(ref.id, x.body)
-        local first = ns.db.where == "account" and "account" or "char"
-        local second = first == "account" and "char" or "account"
-        for _, scope in ipairs({ first, second }) do
-            if Room(scope) and CreateMacro(name, x.icon or ns.QUESTION_MARK, body, scope == "char") then
-                ns.Record("x" .. ref.id, name, scope)
-                local i = ns.Resolve("x" .. ref.id)
-                return true, ("made %s (one %s slot): drag it to a bar"):format(name, scope == "account" and "account" or "character"), i
+    local made, binned = {}, {}
+    local ext = type(db.ext) == "table" and db.ext or {}
+    local ids = {}
+    for id in pairs(ext) do ids[#ids + 1] = id end
+    table.sort(ids)
+    -- turn macros into others from the highest index down: deleting one moves the indexes after it
+    local deletes = {}
+    for _, id in ipairs(ids) do
+        local x = ext[id]
+        local body, icon = tostring(x.body or ""), x.icon or ns.QUESTION_MARK
+        local bar = bars[id] and bars[id][1]
+        local scope, name
+        if #body <= MAX_BODY then
+            if bar then
+                scope = ns.ScopeOf(bar)
+                local cur = GetMacroInfo(bar)
+                name = cur == Trim(tostring(x.name or "")):sub(1, MAX_NAME) and cur or FreeName(x.name, scope)
+                EditMacro(bar, name, icon, body)
+                for k = 2, #bars[id] do deletes[#deletes + 1] = bars[id][k] end
+            else
+                for _, sc in ipairs({ "account", "char" }) do
+                    if not scope and Room(sc) then
+                        local n = FreeName(x.name, sc)
+                        if CreateMacro(n, icon, body, sc == "char") then scope, name = sc, n end
+                    end
+                end
             end
         end
-        return false, "no room: character and account macros are full. A key binding needs no slot."
-    end)
+        DropRecord("x" .. id)
+        if scope then
+            moved[id] = { name = name, scope = scope, body = body, icon = icon }
+            local h = db.history["x" .. id]
+            if h then
+                local store, key = HistStore({ kind = "game", scope = scope, name = name })
+                store[key] = h
+            end
+            made[#made + 1] = name
+        else
+            table.insert(db.bin, 1, { t = Now(), kind = "game", scope = "account", name = tostring(x.name), icon = icon, body = body })
+            while #db.bin > BIN do table.remove(db.bin) end
+            for _, i in ipairs(bars[id] or {}) do deletes[#deletes + 1] = i end
+            binned[#binned + 1] = tostring(x.name) .. (#body > MAX_BODY and (" (" .. #body .. " characters, a macro takes 255)") or " (no free macro slot)")
+        end
+        db.history["x" .. id] = nil
+        bars[id] = nil
+    end
+    -- bar macros on this character for extended macros moved on another one: they become that macro too
+    for id, list in pairs(bars) do
+        local m = moved[id]
+        for k, i in ipairs(list) do
+            if m and k == 1 then
+                local scope = ns.ScopeOf(i)
+                local cur = GetMacroInfo(i)
+                EditMacro(i, cur == m.name and cur or FreeName(m.name, scope), m.icon, m.body)
+            else
+                deletes[#deletes + 1] = i -- it clicked a button that no longer exists
+            end
+        end
+        DropRecord("x" .. id)
+    end
+    table.sort(deletes, function(p, q) return p > q end)
+    for _, i in ipairs(deletes) do DeleteMacro(i) end
+    for k in pairs(db.history) do if type(k) == "string" and k:match("^x%d+$") then db.history[k] = nil end end
+    db.ext, db.extNext = nil, nil
+    RingSlices(moved)
+    if #made > 0 then
+        ns.app:Print(("extended macros are gone: %d became normal macros (%s). Your bar buttons for them keep working."):format(#made, table.concat(made, ", ")))
+    end
+    if #binned > 0 then
+        ns.app:Print("|cffffb347not made into a macro, kept in the bin under Backups:|r " .. table.concat(binned, ", ") .. ".")
+    end
+    if (#made > 0 or #binned > 0) and ns.app.Refresh then ns.app:Refresh() end
+    return made, binned
 end
 
 ------------------------------------------------------------------------
@@ -569,7 +547,7 @@ local function Dec(s) return (tostring(s):gsub("%%(%x%x)", function(h) return st
 function ns.Export(refs)
     local lines = { "MOM1" }
     for _, r in ipairs(refs) do
-        local kind = r.kind == "ext" and "x" or (r.scope == "account" and "a" or "c")
+        local kind = r.scope == "account" and "a" or "c"
         lines[#lines + 1] = kind .. " " .. Enc(r.icon or ns.QUESTION_MARK) .. " " .. Enc(r.name) .. " " .. Enc(r.body)
     end
     return table.concat(lines, "\n")
@@ -593,8 +571,9 @@ function ns.ParseExport(text)
     return list
 end
 
--- Import entries: as they were (`as` nil), or all as "x" (extended), "a" or "c". Never replaces a macro:
--- a name already taken in that scope gets " 2", " 3" ... (shortened to fit 16 characters).
+-- Import entries: as they were (`as` nil), or all as "a" or "c". Never replaces a macro: a name already taken in that
+-- scope gets " 2", " 3" ... (shortened to fit 16 characters). An older export's extended ones ("x") go where new macros
+-- go (Options); one that is full goes to the other kind; text over 255 characters can't be a macro.
 function ns.Import(list, as)
     if InCombatLockdown() then
         ns.Defer("importing macros", function() ns.app:Print(select(2, ns.Import(list, as))) end)
@@ -603,23 +582,122 @@ function ns.Import(list, as)
     local made, failed = 0, {}
     for _, e in ipairs(list) do
         local kind = as or e.kind
-        local body = e.body
-        if kind ~= "x" and #body > MAX_BODY then kind = "x" end -- too long for a game macro
-        if kind == "x" then
-            if ns.CreateExt(e.name, e.icon, body) then made = made + 1 else failed[#failed + 1] = e.name end
+        local body = tostring(e.body or "")
+        if #body > MAX_BODY then
+            failed[#failed + 1] = e.name .. " (" .. #body .. " characters, a macro takes 255)"
         else
-            local scope = kind == "a" and "account" or "char"
+            local first = kind == "a" and "account" or kind == "c" and "char" or (ns.db.where == "account" and "account" or "char")
+            local scope
+            for _, sc in ipairs({ first, first == "account" and "char" or "account" }) do
+                if not scope and Room(sc) then scope = sc end
+            end
             local name, n = e.name:sub(1, MAX_NAME), 1
-            while ns.EachMacro(scope, function(_, x) return x == name end) do
+            while scope and ns.EachMacro(scope, function(_, x) return x == name end) do
                 n = n + 1
                 local suffix = " " .. n
                 name = e.name:sub(1, MAX_NAME - #suffix) .. suffix
             end
-            if ns.CreateGame(scope, name, e.icon, body) then made = made + 1 else failed[#failed + 1] = e.name end
+            if scope and ns.CreateGame(scope, name, e.icon, body) then made = made + 1 else failed[#failed + 1] = e.name .. " (no free macro slot)" end
         end
     end
     return made > 0, ("imported %d macro%s%s"):format(made, made == 1 and "" or "s",
-        #failed > 0 and (", no room for: " .. table.concat(failed, ", ")) or "")
+        #failed > 0 and (", not made: " .. table.concat(failed, ", ")) or "")
+end
+
+------------------------------------------------------------------------
+-- The spellbook (the spell pickers) and the mouseover builder
+------------------------------------------------------------------------
+-- The spells this character can cast, by name: { name, icon, rank = highest "Rank N" or nil, id }, sorted.
+function ns.SpellBook()
+    local out, byName = {}, {}
+    local SB = C_SpellBook
+    if not (SB and SB.GetNumSpellBookSkillLines and SB.GetSpellBookSkillLineInfo) then return out end
+    local bank = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player
+    local future = Enum and Enum.SpellBookItemType and Enum.SpellBookItemType.FutureSpell
+    for line = 1, SB.GetNumSpellBookSkillLines() or 0 do
+        local li = SB.GetSpellBookSkillLineInfo(line)
+        local off = li and li.itemIndexOffset or 0
+        for i = 1, li and li.numSpellBookItems or 0 do
+            local slot = off + i
+            local info = SB.GetSpellBookItemInfo and SB.GetSpellBookItemInfo(slot, bank)
+            local name = info and info.name or (SB.GetSpellBookItemName and SB.GetSpellBookItemName(slot, bank))
+            if type(name) == "string" and name ~= "" and not (info and (info.isPassive or (future and info.itemType == future))) then
+                local sub = info and info.subName
+                if (type(sub) ~= "string" or sub == "") and info and info.spellID and C_Spell and C_Spell.GetSpellSubtext then
+                    sub = C_Spell.GetSpellSubtext(info.spellID)
+                end
+                local rank = type(sub) == "string" and tonumber(sub:match("(%d+)")) or nil
+                local icon = info and info.iconID or (SB.GetSpellBookItemTexture and SB.GetSpellBookItemTexture(slot, bank))
+                local s = byName[name]
+                if not s then
+                    s = { name = name, icon = icon or ns.QUESTION_MARK, rank = rank, id = info and info.spellID }
+                    byName[name] = s
+                    out[#out + 1] = s
+                elseif rank and (not s.rank or rank > s.rank) then
+                    s.rank = rank
+                end
+            end
+        end
+    end
+    table.sort(out, function(a, b) return a.name < b.name end)
+    return out
+end
+
+-- A spell for a macro line: "Flash Heal", or a set rank "Flash Heal(Rank 1)".
+local function Ranked(spell, rank) return rank and (spell .. "(Rank " .. rank .. ")") or spell end
+ns.Ranked = Ranked
+
+-- A short name for a spell in a macro name: initials of a long one ("Devouring Plague" -> "DP"), a rank as "r1".
+local function Short(spell, rank, whole)
+    local words = {}
+    for w in tostring(spell):gmatch("[%w']+") do words[#words + 1] = w end
+    local s = spell
+    if not whole and #words > 1 then
+        s = ""
+        for _, w in ipairs(words) do s = s .. w:sub(1, 1):upper() end
+    end
+    return s .. (rank and (" r" .. rank) or "")
+end
+
+-- The mouseover builder: o = { friend, friendRank, enemy, enemyRank, fallback (default on), stop, whisper }.
+-- The friend under the mouse gets `friend`, the enemy under it `enemy`; with fallback, your target when the mouse
+-- is over nobody. Never casts on you. Returns the text and a suggested name (at most 16 characters).
+function ns.BuildMouseover(o)
+    local f = o.friend and o.friend ~= "" and Ranked(o.friend, o.friendRank) or nil
+    local e = o.enemy and o.enemy ~= "" and Ranked(o.enemy, o.enemyRank) or nil
+    if not f and not e then return nil, nil end
+    local fallback = o.fallback ~= false
+    local cast
+    if f and e then
+        cast = "[@mouseover,help,nodead] " .. f .. "; [@mouseover,harm,nodead]" .. (fallback and "[harm,nodead]" or "") .. " " .. e
+            .. (fallback and ("; [help,nodead] " .. f) or "")
+    elseif f then
+        cast = "[@mouseover,help,nodead]" .. (fallback and "[help,nodead]" or "") .. " " .. f
+    else
+        cast = "[@mouseover,harm,nodead]" .. (fallback and "[harm,nodead]" or "") .. " " .. e
+    end
+    local lines = { (f and e) and "#showtooltip" or ("#showtooltip " .. (f or e)) }
+    if o.stop then lines[#lines + 1] = "/stopcasting" end
+    local pi = o.friend == "Power Infusion" or o.enemy == "Power Infusion"
+    if pi and o.whisper ~= false then lines[#lines + 1] = "/mom pi" end
+    lines[#lines + 1] = "/cast " .. cast
+    local name
+    if f and e then
+        name = Short(o.enemy, o.enemyRank) .. " / " .. Short(o.friend, o.friendRank, true)
+        if #name > MAX_NAME then name = Short(o.enemy, o.enemyRank) .. " / " .. Short(o.friend, o.friendRank) end
+    else
+        name = Short(o.friend or o.enemy, f and o.friendRank or o.enemyRank, true)
+        if #name > MAX_NAME then name = Short(o.friend or o.enemy, f and o.friendRank or o.enemyRank) end
+    end
+    return table.concat(lines, "\n"), name:sub(1, MAX_NAME)
+end
+
+-- Where a new macro goes: the chosen kind ("char" or "account"), else the other one; nil when both are full.
+function ns.FreeScope(first)
+    first = first == "account" and "account" or "char"
+    for _, sc in ipairs({ first, first == "account" and "char" or "account" }) do
+        if Room(sc) then return sc end
+    end
 end
 
 ------------------------------------------------------------------------
@@ -643,6 +721,8 @@ ns.TEMPLATES = {
         body = "#showtooltip\n/cast [@mouseover,help,nodead] Flash Heal(Rank 1); [@mouseover,harm,nodead][harm,nodead] Smite" },
     { id = "dppi", title = "Devouring Plague / Power Infusion", desc = "Power Infusion on the friend under the mouse; else Devouring Plague on the mouseover enemy or your target.", class = "PRIEST",
         body = "#showtooltip\n/mom pi\n/cast [@mouseover,help,nodead] Power Infusion; [@mouseover,harm,nodead][harm,nodead] Devouring Plague; [help,nodead] Power Infusion" },
+    { id = "dpfheal", title = "Devouring Plague / Flash Heal rank 1", desc = "Flash Heal (rank 1) on the friend under the mouse, else your friendly target; else Devouring Plague on the mouseover enemy or your target.", class = "PRIEST",
+        body = "#showtooltip\n/cast [@mouseover,help,nodead] Flash Heal(Rank 1); [@mouseover,harm,nodead][harm,nodead] Devouring Plague; [help,nodead] Flash Heal(Rank 1)" },
     { id = "pifun", title = "Power Infusion + a funny whisper", desc = "Power Infusion on the friend under the mouse, else your friendly target, and a funny whisper to them.", class = "PRIEST",
         body = "#showtooltip Power Infusion\n/mom pi\n/cast [@mouseover,help,nodead][help,nodead] Power Infusion" },
     { id = "swprenew", title = "Shadow Word: Pain / Renew", desc = "Renew on the friend under the mouse; else Shadow Word: Pain on the mouseover enemy or your target.", class = "PRIEST",
@@ -657,9 +737,8 @@ function ns.Templates()
     return out
 end
 
--- Make a template as a _mom game macro (ours, key "t:<id>") or an extended macro.
-function ns.MakeTemplate(t, asExt)
-    if asExt then return ns.CreateExt(t.title, ns.QUESTION_MARK, t.body) end
+-- Make a template as a _mom game macro (ours, key "t:<id>"), or update the one made before.
+function ns.MakeTemplate(t)
     return ExactlyNow("making " .. t.title, function()
         local key = "t:" .. t.id
         local i, name = ns.Resolve(key)
@@ -678,6 +757,6 @@ function ns.MakeTemplate(t, asExt)
                 return true, ("made %s as %s"):format(t.title, name)
             end
         end
-        return false, "no room: character and account macros are full. Make it as an extended macro instead."
+        return false, "no free macro slot: character and account macros are full. Delete one first."
     end)
 end

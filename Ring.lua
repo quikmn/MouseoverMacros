@@ -449,7 +449,7 @@ end
 
 local baseWorld = ns.OnWorld
 ns.OnWorld = function()
-    if baseWorld then baseWorld() end -- SyncExt binds the keys, the ring's too
+    if baseWorld then baseWorld() end -- ApplyBindings binds the ring's key
     R.Rebuild()
 end
 
