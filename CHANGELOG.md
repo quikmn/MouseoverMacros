@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.7 (2026-11-22)
 - Priest templates, one button for two jobs (the friend under the mouse, else the enemy): Mind Blast / Heal rank 1, Smite / Flash Heal rank 1, Devouring Plague / Power Infusion, Shadow Word: Pain / Renew.
 
 ## v0.3.6 (2026-11-22)
