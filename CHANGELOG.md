@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.4.0 (2026-11-22)
 - A new window built around three jobs. **Macros**: all your macros in one list (what each one casts first), the editor right next to it. Drag a row or the editor's icon onto your bars, or click Put on bar.
 - The editor: name, icon (from the spell, or pick one), a live check of every spell name and the 255 count, Insert spell from your spellbook with a rank, tidy condition buttons, Save and Undo. Earlier versions are folded away under the text.
 - **Mouseover builder**: pick a spell for a friend, one for an enemy, or both, with a rank. You see the macro and a short name ("DP / FH r1"); Create saves it and puts it on your cursor. Your class's set and the ready-made macros are its Quick picks, with "Make my whole mouseover set".
