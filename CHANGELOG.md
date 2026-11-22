@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.8 (2026-11-22)
 - Power Infusion whispers a funny line to whoever gets it (the friend under the mouse, else your friendly target). Once a minute per person at most, only when it's ready, never to yourself. In the Power Infusion macro, the Devouring Plague / Power Infusion template (now also on a friendly target) and a new "Power Infusion + a funny whisper" template. /mom pi does it from any macro.
 
 ## v0.3.7 (2026-11-22)
