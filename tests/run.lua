@@ -190,7 +190,7 @@ step("macro bodies: the old text plus a #mom marker line, all within 255", funct
 		local plain = e.body:gsub("\n#mom %w+$", "")
 		local found = false
 		for _, b in ipairs(ns.LEGACY.PRIEST[e.key] or { plain }) do if b == plain then found = true end end -- new macros have no old text
-		check(found, e.key .. " has no legacy body matching the current one")
+		check(found or e.key == "curedis", e.key .. " has no legacy body matching the current one") -- curedis: Abolish once known
 	end
 	check(n == 56, "56 priest macros (41 + 15 heal ranks), got " .. n)
 	-- a body with no room for the marker goes without it
@@ -275,7 +275,7 @@ step("install all: switched-off skipped, character first then account, nothing o
 	SlashCmdList.MOUSEOVERMACROS("install")
 	check(entry("penance").status == "new", "switched-off macro created")
 	check(#macros.char == 18, "character macros filled first: " .. #macros.char)
-	check(last():find("created 27, updated 4", 1, true) and last():find("25 switched off", 1, true), "summary: " .. last())
+	check(last():find("created 26, updated 4", 1, true) and last():find("26 switched off", 1, true), "summary: " .. last())
 	check(find("fort").body == PLAYER_FORT and find("smite").body == "#showtooltip Smite\n/cast Smite"
 		and find("_mom1234").body:find("player's", 1, true) and find("Mount"), "player's macros changed")
 	for _, e in ipairs(ns.Entries()) do
@@ -283,7 +283,7 @@ step("install all: switched-off skipped, character first then account, nothing o
 	end
 	SlashCmdList.MOUSEOVERMACROS("on penance")
 	SlashCmdList.MOUSEOVERMACROS("all")
-	check(last():find("created 1, updated 31", 1, true), "second install: " .. last())
+	check(last():find("created 1, updated 30", 1, true), "second install: " .. last())
 	check(MouseoverMacrosDB.owned.penance and MouseoverMacrosDB.owned.penance.scope == "account", "account record when character is full")
 end)
 
@@ -378,13 +378,17 @@ step("the window list: names, states, Create / Update / Pick up buttons", functi
 	check(MOCK.picked == GetMacroIndexByName(entry("smite").macro), "pick up")
 	-- in combat the game blocks PickupMacro: the button greys out, the tooltip says "after combat", a click does nothing
 	MOCK.picked = nil
+	local realShow, opened = ns.ShowBlizzardMacros, 0
+	ns.ShowBlizzardMacros = function() opened = opened + 1 end
 	MOCK.combat = true
 	MOCK.Fire("PLAYER_REGEN_DISABLED")
-	check(smite.buttons[2]:GetAlpha() < 1, "Pick up greyed out in combat")
+	check(smite.buttons[2]:GetAlpha() == 1, "Pick up stays usable in combat (it opens the game's macro window)")
 	smite.buttons[2]:GetScript("OnClick")(smite.buttons[2])
 	check(MOCK.picked == nil, "PickupMacro called in combat")
 	ns.PickUp(ns.List("account")[1] or { kind = "game", id = 1 })
 	check(MOCK.picked == nil, "ns.PickUp in combat")
+	check(opened > 0, "Pick up in combat opens the game's macro window")
+	ns.ShowBlizzardMacros = realShow
 	MOCK.combat = false
 	MOCK.Fire("PLAYER_REGEN_ENABLED")
 	check(smite.buttons[2]:GetAlpha() == 1, "Pick up back after combat")

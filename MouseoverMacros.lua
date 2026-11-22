@@ -96,6 +96,8 @@ function ns.SetOn(key, on) if db then db.off[key] = not on end end
 
 -- The spell's name in the client's language (from its ID), else the English name in Classes.lua.
 function ns.SpellName(m)
+    -- a spell that replaces this one once learned (Cure Disease -> Abolish Disease): the same macro, one slot
+    if m.upgrade and ns.Known and ns.Known(m.upgrade) then m = m.upgrade end
     local n
     if m.id then
         if C_Spell and C_Spell.GetSpellName then n = C_Spell.GetSpellName(m.id)

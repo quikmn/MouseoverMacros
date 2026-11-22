@@ -303,14 +303,27 @@ ns.CountsLine = CountsLine
 -- out in combat (the row's tooltip says "after combat") and come back when it ends.
 local function CanPickUp() return not InCombatLockdown() end
 ns.CanPickUp = CanPickUp
-local PICKUP_LATER = "|cffffd27fPick up: after combat (the game does not allow it in combat).|r"
+local PICKUP_LATER = "|cffffd27fIn combat: drag it from the game's macro window (Pick up opens it).|r"
 local function PickUpTip(t)
     if not CanPickUp() then t[#t + 1] = " "; t[#t + 1] = PICKUP_LATER end
     return t
 end
 
+-- In combat: the game's own macro window can still put a macro on the cursor, so it opens (next to ours) and one
+-- line says so, at most every 30 s.
+local saidAt
+local function InCombat()
+    if ns.ShowBlizzardMacros then ns.ShowBlizzardMacros() end
+    local now = GetTime and GetTime() or 0
+    if not saidAt or now - saidAt > 30 then
+        saidAt = now
+        app:Print("in combat the game won't let an addon pick up a macro: drag it from the game's macro window (opened), or wait until combat ends.")
+    end
+end
+ns.PickUpInCombat = InCombat
+
 local function PickUp(ref)
-    if not CanPickUp() then app:Print("pick it up after combat (the game does not allow it in combat).") return end
+    if not CanPickUp() then InCombat() return end
     if ref.kind == "ext" then
         local bar = ns.ExtBarMacro(ref.id)
         if bar and PickupMacro then PickupMacro(bar.index) end
@@ -361,7 +374,7 @@ local function MacroList(stack, which)
         drag = function(r) if r.kind == "game" or ns.ExtBarMacro(r.id) then PickUp(r) end end,
         buttons = {
             { label = "Edit", width = 60, onClick = function(r) ns.Edit(r) end },
-            { label = "Pick up", width = 70, onClick = function(r) PickUp(r) end, usable = CanPickUp,
+            { label = "Pick up", width = 70, onClick = function(r) PickUp(r) end,
                 shown = function(r) return r.kind == "game" or ns.ExtBarMacro(r.id) ~= nil end },
         },
     })
@@ -446,16 +459,16 @@ app:Section("templates", "Templates", function(stack)
         end,
         drag = function(e)
             if not e.index then return end
-            if not CanPickUp() then app:Print("pick it up after combat (the game does not allow it in combat).") return end
+            if not CanPickUp() then InCombat() return end
             if PickupMacro then PickupMacro(e.index) end
         end,
         buttons = {
             { label = function(e) return BUTTON[e.status] end,
                 width = 90, onClick = function(e) ns.InstallOne(e) end, usable = function(e) return e.status ~= "ok" end },
-            { label = "Pick up", width = 74, usable = CanPickUp,
+            { label = "Pick up", width = 74,
                 onClick = function(e)
                     if not e.index then return end
-                    if not CanPickUp() then app:Print("pick it up after combat (the game does not allow it in combat).") return end
+                    if not CanPickUp() then InCombat() return end
                     if PickupMacro then PickupMacro(e.index) end
                 end,
                 shown = function(e) return e.index ~= nil end },
@@ -734,7 +747,7 @@ app:Section("edit", "Edit", function(stack)
             if not ed.ref or ed.ref.kind ~= "ext" then return end
             local ok, msg, index = ns.ExtToBar(ed.ref)
             if ok and index and PickupMacro then
-                if CanPickUp() then PickupMacro(index) else msg = (msg or "") .. " Pick it up from the list after combat." end
+                if CanPickUp() then PickupMacro(index) else InCombat() end
             end
             Say(ok, msg)
         end, desc = "Makes a one-line _mom macro that clicks this one (takes one slot) and puts it on your cursor." },
@@ -885,6 +898,8 @@ local function ShowBlizzard()
     end
     if not (MacroFrame and MacroFrame:IsShown()) then allowBlizzard = nil end
 end
+
+ns.ShowBlizzardMacros = ShowBlizzard
 
 -- Blizzard's own macro window, whatever the setting. Ours closes (asking first about unsaved changes).
 function ns.OpenBlizzard()
