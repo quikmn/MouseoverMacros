@@ -151,7 +151,7 @@ CASES.sets = function()
 			check(set and #set >= 5, class .. " has no set")
 			local on = 0
 			for _, m in ipairs(set) do
-				check(type(m[1]) == "string" and m[1]:match("^[a-z]+$") and #m[1] <= 10, class .. " key " .. tostring(m[1]))
+				check(type(m[1]) == "string" and (m[1]:match("^[a-z]+$") or m.rank and m[1]:match("^[a-z]+r%d$")) and #m[1] <= 10, class .. " key " .. tostring(m[1]))
 				check(not keys[m[1]], "key " .. m[1] .. " in " .. class .. " and " .. tostring(keys[m[1]]))
 				keys[m[1]] = class
 				check(ns.KINDS[m[3]], m[1] .. ": kind " .. tostring(m[3]))
@@ -199,7 +199,7 @@ CASES.sets = function()
 				-- res ends in [] (the hand cursor for a body on the ground): you can't res yourself, so it never lands on you
 				if e.kind == "res" then check(b:find("[@mouseover,help,dead][help,dead][] ", 1, true), e.key .. " res conditions") end
 				if e.kind == "any" then check(b:find("[@mouseover,exists,nodead][exists,nodead]", 1, true), e.key .. " any conditions") end
-				check(not b:find("rank", 1, true), e.key .. " names a rank")
+				check(e.key:match("r%d$") or not b:find("rank", 1, true), e.key .. " names a rank")
 			end
 		end
 		check(n > 150, "only " .. n .. " macros")

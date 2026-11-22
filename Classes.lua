@@ -209,6 +209,25 @@ ns.MACROS = {
     },
 }
 
+-- Lower ranks of the priest heals, as their own macros ("Heal(Rank 2)"): cheaper, smaller heals for topping
+-- people up without overhealing. Off by default (each takes a slot); switch on the ones you use. The highest
+-- rank is the plain macro above, so every rank but the last is listed. Spell IDs from the client's own tables.
+do
+    local RANKS = {
+        { "lheal", "Lesser Heal", { 2050, 2052, 2053 } },
+        { "heal", "Heal", { 2054, 2055, 6063, 6064 } },
+        { "fheal", "Flash Heal", { 2061, 9472, 9473, 9474, 10915, 10916, 10917 } },
+        { "gheal", "Greater Heal", { 2060, 10963, 10964, 10965, 25314 } },
+    }
+    local set = ns.MACROS.PRIEST
+    for _, r in ipairs(RANKS) do
+        for n = 1, #r[3] - 1 do
+            set[#set + 1] = { r[1] .. "r" .. n, r[2], "help", id = r[3][n], rank = n, on = false,
+                why = "rank " .. n .. ": a cheaper, smaller heal" }
+        end
+    end
+end
+
 -- What is deliberately left out, with why (the tests check none of these ends up in a set).
 ns.EXCLUDED = {
     PRIEST = {

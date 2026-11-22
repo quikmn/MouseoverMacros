@@ -192,7 +192,7 @@ step("macro bodies: the old text plus a #mom marker line, all within 255", funct
 		for _, b in ipairs(ns.LEGACY.PRIEST[e.key] or { plain }) do if b == plain then found = true end end -- new macros have no old text
 		check(found, e.key .. " has no legacy body matching the current one")
 	end
-	check(n == 41, "41 priest macros, got " .. n)
+	check(n == 56, "56 priest macros (41 + 15 heal ranks), got " .. n)
 	-- a body with no room for the marker goes without it
 	local long = ns.Body({ "x", ("A"):rep(96), "help" })
 	check(not long:find("#mom", 1, true) and #long <= 255, "marker past 255")
@@ -275,7 +275,7 @@ step("install all: switched-off skipped, character first then account, nothing o
 	SlashCmdList.MOUSEOVERMACROS("install")
 	check(entry("penance").status == "new", "switched-off macro created")
 	check(#macros.char == 18, "character macros filled first: " .. #macros.char)
-	check(last():find("created 27, updated 4", 1, true) and last():find("10 switched off", 1, true), "summary: " .. last())
+	check(last():find("created 27, updated 4", 1, true) and last():find("25 switched off", 1, true), "summary: " .. last())
 	check(find("fort").body == PLAYER_FORT and find("smite").body == "#showtooltip Smite\n/cast Smite"
 		and find("_mom1234").body:find("player's", 1, true) and find("Mount"), "player's macros changed")
 	for _, e in ipairs(ns.Entries()) do
@@ -366,7 +366,7 @@ step("the window list: names, states, Create / Update / Pick up buttons", functi
 	ns.app:Open("templates")
 	local list
 	for _, w in ipairs(ns.app.sections.templates.stack.widgets) do if w.rows and not list then list = w end end
-	check(list and #list.rows == 41, "41 rows")
+	check(list and #list.rows == 56, "56 rows")
 	local smite, dplague
 	for _, r in ipairs(list.rows) do
 		if r.item.key == "smite" then smite = r end
@@ -629,7 +629,7 @@ step("help, list, settings and unknown commands", function()
 	end
 	MOCK.log = {}
 	SlashCmdList.MOUSEOVERMACROS("list")
-	check(#MOCK.log == 41, "list lines: " .. #MOCK.log)
+	check(#MOCK.log == 56, "list lines: " .. #MOCK.log)
 	check(table.concat(MOCK.log, "\n"):find("_mom", 1, true), "list shows names")
 	SlashCmdList.MOUSEOVERMACROS("settings")
 	SlashCmdList.MOUSEOVERMACROS("bogus")
@@ -1335,6 +1335,17 @@ step("never touches other windows (UIPanelWindows, Show/HideUIPanel, UISpecialFr
 		end
 	end
 	check(next(UISpecialFrames) == nil, "UISpecialFrames touched")
+end)
+
+step("priest heal ranks: their own macros, off by default, exact rank only", function()
+	local by = {}
+	for _, m in ipairs(ns.MACROS.PRIEST) do by[m[1]] = m end
+	for _, k in ipairs({ "lhealr1", "lhealr2", "healr1", "healr3", "fhealr6", "ghealr1", "ghealr4" }) do
+		check(by[k] and by[k].on == false and by[k].rank, "missing rank entry " .. k)
+	end
+	check(not by.lhealr3 and not by.healr4 and not by.ghealr5, "the top rank is the plain macro")
+	check(ns.SpellName(by.healr2):find("^%w+%(Rank 2%)$"), ns.SpellName(by.healr2))
+	check(ns.Body(by.healr2):find("%[@mouseover,help,nodead%]%[help,nodead%] %w+%(Rank 2%)"), ns.Body(by.healr2))
 end)
 
 step("the Mine list names what each _mom macro casts", function()

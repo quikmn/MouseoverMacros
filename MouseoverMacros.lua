@@ -102,6 +102,13 @@ function ns.SpellName(m)
         elseif GetSpellInfo then n = GetSpellInfo(m.id) end
     end
     if type(n) ~= "string" or n == "" then n = m[2] end
+    if m.rank then   -- a set rank: "Heal(Rank 2)", in the client's language when it says how it writes "Rank 2"
+        local sub
+        if C_Spell and C_Spell.GetSpellSubtext then sub = C_Spell.GetSpellSubtext(m.id)
+        elseif GetSpellSubtext then sub = GetSpellSubtext(m.id) end
+        if type(sub) ~= "string" or not sub:find("%d") then sub = "Rank " .. m.rank end
+        n = n .. "(" .. sub .. ")"
+    end
     return n
 end
 
@@ -121,6 +128,7 @@ function ns.Known(m)
     elseif Ask(IsPlayerSpell, m.id) or Ask(IsSpellKnown, m.id) then
         return true
     end
+    if m.rank then return false end   -- a set rank: that exact rank, never "any rank of the name"
     -- a higher rank under the same name (rank 1 dropped from the spellbook)
     if SB and SB.FindSpellBookSlotForSpell then
         local ok, slot = pcall(SB.FindSpellBookSlotForSpell, ns.SpellName(m), false, true, false, false)
@@ -729,6 +737,7 @@ app:Command("list", "list", "your class's macros in chat", function()
 end)
 
 local function SpellIcon(spell)
+    spell = type(spell) == "string" and spell:gsub("%(.-%)$", "") or spell   -- "Heal(Rank 2)": the spell's icon
     if C_Spell and C_Spell.GetSpellTexture then return C_Spell.GetSpellTexture(spell) or QUESTION_MARK end
     if GetSpellTexture then return GetSpellTexture(spell) or QUESTION_MARK end
     return QUESTION_MARK
