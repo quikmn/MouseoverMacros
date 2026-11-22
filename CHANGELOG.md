@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.5 (2026-11-22)
 - The Mine list shows what each macro casts, by spell name, next to its _mom name.
 
 ## v0.3.4 (2026-11-22)
