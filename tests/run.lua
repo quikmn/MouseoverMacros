@@ -1337,6 +1337,16 @@ step("never touches other windows (UIPanelWindows, Show/HideUIPanel, UISpecialFr
 	check(next(UISpecialFrames) == nil, "UISpecialFrames touched")
 end)
 
+step("the Mine list names what each _mom macro casts", function()
+	local W = ns.WhatItDoes
+	check(W("#showtooltip\n/cast [@mouseover,help,nodead][help,nodead] Abolish Disease\n#mom x") == "Abolish Disease", "mouseover heal")
+	check(W("/stopcasting\n/cast [@mouseover,harm,nodead][harm,nodead] !Shoot") == "Shoot", "stopcasting + !Shoot")
+	local two = W("/cast Inner Focus\n/cast [help] Greater Heal; [harm] Smite")
+	check(two == "Inner Focus, Greater Heal, Smite", two)
+	check(W("/castsequence reset=3 Smite, Smite") == "Smite", "castsequence")
+	check(W("/say hi") == "", "nothing cast")
+end)
+
 step("the player's macros were never changed", function()
 	check(find("fort").body == PLAYER_FORT and find("Mount2").body == "/cast Riding Turtle", "changed") -- Mount2: renamed by the player in the editor
 	check(find("smite").body == "#showtooltip Smite\n/cast Smite", "smite changed")

@@ -89,6 +89,31 @@ function ns.List(which)
     return out
 end
 
+-- What a macro casts, in words: the spell names of its /cast and /use lines ("Abolish Disease"), or the
+-- extended macro a "/click MoMX_<id>" runs. Shown next to the _mom names, which say nothing by themselves.
+function ns.WhatItDoes(body)
+    local names, seen = {}, {}
+    local function add(n)
+        n = n and n:gsub("^%s+", ""):gsub("%s+$", ""):gsub("^!", "")
+        if n and n ~= "" and not n:match("^%d+$") and not seen[n] then seen[n] = true; names[#names + 1] = n end
+    end
+    for line in tostring(body or ""):gmatch("[^\n]+") do
+        local cmd, rest = line:match("^%s*/(%a+)%s+(.*)$")
+        cmd = cmd and cmd:lower()
+        if cmd == "cast" or cmd == "use" or cmd == "castsequence" then
+            for part in (rest .. ";"):gmatch("([^;]*);") do
+                part = part:gsub("%b[]", ""):gsub("reset=%S+", "")
+                for n in (part .. ","):gmatch("([^,]*),") do add(n) end
+            end
+        elseif cmd == "click" then
+            local id = rest:match("^MoMX_(%d+)")
+            local x = id and ns.ExtRef(tonumber(id))
+            if x then add(x.name) end
+        end
+    end
+    return table.concat(names, ", ")
+end
+
 function ns.Counts()
     local a, c = GetNumMacros()
     local n = 0

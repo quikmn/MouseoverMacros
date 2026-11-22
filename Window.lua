@@ -347,6 +347,8 @@ local function MacroList(stack, which)
         icon = function(r) return r.icon or QM end,
         title = function(r)
             local tag = r.kind == "ext" and "  |cff40c0ffextended|r" or (r.ours and "  |cff62cf88made by /mom|r" or "")
+            local what = r.ours and ns.WhatItDoes(r.body) or ""
+            if what ~= "" then return Esc(what) .. "  |cff8d94a3" .. Esc(r.name) .. "|r" .. tag end
             return Esc(r.name) .. tag
         end,
         detail = function(r) return "|cff8d94a3" .. ns.Cost(r) .. "  -  " .. Esc(FirstLine(r.body)) .. "|r" end,
