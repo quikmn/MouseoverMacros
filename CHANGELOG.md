@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.6 (2026-11-22)
 - Priest: lower ranks of Lesser Heal, Heal, Flash Heal and Greater Heal as their own mouseover macros ("Heal(Rank 2)"), for cheaper top-ups. Off by default; switch on the ones you use under Templates.
 
 ## v0.3.5 (2026-11-22)
