@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.4 (2026-11-22)
 - Resurrection macros (Resurrection, Redemption, Ancestral Spirit, Rebirth, Revive): with no corpse under the mouse or targeted, the spell's hand comes up so you can click a body on the ground.
 
 ## v0.3.3 (2026-11-21)
