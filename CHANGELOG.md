@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Priest: lower ranks of Lesser Heal, Heal, Flash Heal and Greater Heal as their own mouseover macros ("Heal(Rank 2)"), for cheaper top-ups. Off by default; switch on the ones you use under Templates.
+
 ## v0.3.5 (2026-11-22)
 - The Mine list shows what each macro casts, by spell name, next to its _mom name.
 
