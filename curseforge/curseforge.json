@@ -14,5 +14,6 @@
     "Website": "https://everlookdb.com/mouseover-macros.html",
     "Github": "https://github.com/quikmn/MouseoverMacros"
   },
+  "screenshots": "screenshots",
   "syncOnRelease": false
 }

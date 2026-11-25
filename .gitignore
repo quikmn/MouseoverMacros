@@ -1,1 +1,3 @@
 .release/
+screenshots/raw/
+__pycache__/
