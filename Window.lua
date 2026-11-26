@@ -753,11 +753,15 @@ local function BuildEditor(stack)
     })
     ns.insertSpell = spellPick
 
-    -- the condition buttons, three tidy rows of four
-    local rows = { {}, {}, {} }
+    -- the condition buttons: tidy rows, four across when the editor is wide enough, else three
+    local perRow = stack.width >= 4 * 104 + 3 * 8 and 4 or 3
+    local bw = math.min(130, math.floor((stack.width - (perRow - 1) * 8) / perRow))
+    local rows = {}
     for i, d in ipairs(INSERTS) do
-        local row = rows[math.floor((i - 1) / 4) + 1]
-        row[#row + 1] = { label = d[1], width = 104, onClick = function() Insert(d[2]) end, desc = "Inserts " .. (d[2]:gsub("\n", "")) }
+        local ri = math.floor((i - 1) / perRow) + 1
+        rows[ri] = rows[ri] or {}
+        local row = rows[ri]
+        row[#row + 1] = { label = d[1], width = bw, onClick = function() Insert(d[2]) end, desc = "Inserts " .. (d[2]:gsub("\n", "")) }
     end
     for _, row in ipairs(rows) do row.search = false; UI.ButtonRow(stack, row) end
 
@@ -863,7 +867,7 @@ end
 ------------------------------------------------------------------------
 -- The Macros page: the list on the left, the editor on the right
 ------------------------------------------------------------------------
-local LEFT_W = 290
+local LEFT_W, PUT_W = 330, 80
 
 -- A tick box in a list row (bulk delete).
 local function Tick(r, T, onClick)
@@ -925,15 +929,28 @@ app:Section("macros", "Macros", function(holder, _, s)
     })
     ns.macroSearch = searchBox.box
 
-    -- the last delete, with Undo
+    -- the last delete, with Undo. Both fold away (no height, no gap) while there is nothing to say, so the list sits
+    -- right under the search box.
+    local function Fold(frame, on, h)
+        local e = frame.stackEntry
+        frame:SetShown(on)
+        if not e then return end
+        local gap = on and T.rowGap or 0
+        if e.height == (on and h or 0) and e.gap == gap then return end
+        e.height, e.gap = on and h or 0, gap
+        ls:Relayout()
+    end
     local stNote = UI.Note(ls, function() return status and ("|cff62cf88" .. Esc(status.text) .. "|r") or "" end)
+    function stNote:Refresh()
+        self.text:SetText(status and ("|cff62cf88" .. Esc(status.text) .. "|r") or "")
+        Fold(self, status ~= nil, math.max(14, self.text:GetStringHeight() + 2))
+    end
+    stNote:Refresh()
     local undoRow = UI.ButtonRow(ls, {
         { label = "Undo", width = 90, onClick = function() if pending.undo then CancelLater("undo") else ns.Undo() end end },
         search = false,
         refresh = function(row)
-            local on = status ~= nil
-            row:SetShown(on)
-            ls:SetHeightOf(row, on and 26 or 0)
+            Fold(row, status ~= nil, 26)
             row.buttons[1]:SetText(pending.undo and "Cancel" or "Undo")
         end,
     })
@@ -960,7 +977,7 @@ app:Section("macros", "Macros", function(holder, _, s)
         onClick = function(r) ns.Edit(r) end,
         drag = function(r) PickUp(r) end,
         buttons = {
-            { label = "Put on bar", width = 84, onClick = function(r) PickUp(r) end },
+            { label = "Put on bar", width = PUT_W, onClick = function(r) PickUp(r) end },
         },
     })
     -- the tick box left of the icon, and the open macro lit
@@ -978,7 +995,7 @@ app:Section("macros", "Macros", function(holder, _, s)
                 if r.icon then r.icon:ClearAllPoints(); r.icon:SetPoint("LEFT", 32, 0) end
                 r.title:ClearAllPoints()
                 r.title:SetPoint("TOPLEFT", 58, -6)
-                r.title:SetPoint("RIGHT", -(6 + 84 + 4 + 4), 0)
+                r.title:SetPoint("RIGHT", -(6 + PUT_W + 6 + 4), 0)
                 r:HookScript("OnLeave", function(self) if self.item and SameAsEditor(self.item) then self.bg:SetVertexColor(unpack(T.accentDim)) end end)
             end
             local it = r.item
@@ -997,8 +1014,7 @@ app:Section("macros", "Macros", function(holder, _, s)
         search = false,
         refresh = function(row)
             local n = #Selected()
-            row:SetShown(n > 0)
-            ls:SetHeightOf(row, n > 0 and 26 or 0)
+            Fold(row, n > 0, 26)
             row.buttons[1]:SetText("Delete selected (" .. n .. ")")
         end,
     })

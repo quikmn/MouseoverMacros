@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+- Macros page: the list starts right under the search box (no empty gap), and the list is wider, so macro names and their details are no longer cut off.
+- The editor's condition buttons sit three to a row, so none of them runs past the edge.
+- Quick picks: rows without Put on bar use the whole row for their text. Hover a row to read a cut-off line in full.
+- Settings search: the sidebar lights the page of the top result while you search.
+
 ## v0.4.0 (2026-11-22)
 - A new window built around three jobs. **Macros**: all your macros in one list (what each one casts first), the editor right next to it. Drag a row or the editor's icon onto your bars, or click Put on bar.
 - The editor: name, icon (from the spell, or pick one), a live check of every spell name and the 255 count, Insert spell from your spellbook with a rank, tidy condition buttons, Save and Undo. Earlier versions are folded away under the text.
