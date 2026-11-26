@@ -3,7 +3,7 @@
 ## Notes: /mom: your macros - a macro editor, mouseover macros for your spells in a few clicks, backups, export/import, and a ring menu on the middle mouse button.
 ## Author: quikmn
 ## X-License: GPL-3.0
-## Version: 0.4.0
+## Version: 0.4.1
 ## SavedVariables: MouseoverMacrosDB
 ## SavedVariablesPerCharacter: MouseoverMacrosCharDB
 ## IconTexture: Interface\AddOns\MouseoverMacros\Media\icon
