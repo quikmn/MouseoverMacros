@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Whichever window you click now comes to the front.
+
 ## v0.4.1 (2026-11-26)
 - Macros page: the list starts right under the search box (no empty gap), and the list is wider, so macro names and their details are no longer cut off.
 - The editor's condition buttons sit three to a row, so none of them runs past the edge.
