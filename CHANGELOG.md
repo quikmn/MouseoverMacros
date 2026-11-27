@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.4.2 (2026-11-27)
 - Whichever window you click now comes to the front.
 
 ## v0.4.1 (2026-11-26)
